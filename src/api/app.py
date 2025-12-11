@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from loguru import logger
 
 from src.api.middleware import install_logging_middleware
 from src.api.routes import health_router, tasks_router
 from src.service.tasks import task_runner
-
-logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager

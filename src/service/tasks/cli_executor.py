@@ -1,14 +1,19 @@
 from __future__ import annotations
 
-import logging
+import asyncio
+import json
 import os
+import re
 import shutil
 from asyncio.subprocess import PIPE, create_subprocess_exec
-from typing import Optional
+from pathlib import Path
+from typing import Any, Awaitable, Callable, Optional
+
+from loguru import logger
 
 from .models import TaskPayload
 
-logger = logging.getLogger(__name__)
+USE_SCRIPT = True
 
 
 class ClineExecutor:
