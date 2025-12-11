@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from loguru import logger
 
 from src.api.middleware import install_logging_middleware
-from src.api.routes import health_router, tasks_router
+from src.api.routes import health_router, tasks_router, db_tasks_router
 from src.service.tasks import task_runner
 
 
@@ -37,6 +37,7 @@ def create_app() -> FastAPI:
     install_logging_middleware(app)
     app.include_router(health_router)
     app.include_router(tasks_router)
+    app.include_router(db_tasks_router)
 
     logger.info("FastAPI application created.")
     return app
