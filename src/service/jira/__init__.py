@@ -23,6 +23,7 @@ from .parsers import (
     parse_jira_task,
     parse_jira_user,
 )
+from .prompt_models import JiraContext, SubtaskPrompt
 
 __all__ = [
     "JiraAttachment",
@@ -36,6 +37,8 @@ __all__ = [
     "JiraSubtask",
     "JiraTask",
     "JiraUser",
+    "JiraContext",
+    "SubtaskPrompt",
     "extract_rich_text",
     "parse_jira_attachment",
     "parse_jira_comment",
