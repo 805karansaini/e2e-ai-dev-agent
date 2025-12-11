@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import logging
 import time
 from collections.abc import Awaitable, Callable
 from uuid import uuid4
 
 from fastapi import FastAPI, Request, Response
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 _HEALTH_PATHS = {"/health/liveness", "/health/readiness"}
 
@@ -32,10 +30,10 @@ def install_logging_middleware(app: FastAPI) -> None:
 
         if _should_log(path):
             logger.info(
-                "HTTP request start | id=%s method=%s path=%s",
-                correlation_id,
-                request.method,
-                path,
+                "HTTP request start | id={cid} method={method} path={path}",
+                cid=correlation_id,
+                method=request.method,
+                path=path,
             )
 
         try:
@@ -44,11 +42,11 @@ def install_logging_middleware(app: FastAPI) -> None:
             duration_ms = (time.perf_counter() - started) * 1000
             if _should_log(path):
                 logger.exception(
-                    "HTTP request error | id=%s method=%s path=%s latency_ms=%.2f",
-                    correlation_id,
-                    request.method,
-                    path,
-                    duration_ms,
+                    "HTTP request error | id={cid} method={method} path={path} latency_ms={latency:.2f}",
+                    cid=correlation_id,
+                    method=request.method,
+                    path=path,
+                    latency=duration_ms,
                 )
             raise
 
@@ -58,12 +56,12 @@ def install_logging_middleware(app: FastAPI) -> None:
 
         if _should_log(path):
             logger.info(
-                "HTTP response end | id=%s method=%s path=%s status=%s latency_ms=%.2f",
-                correlation_id,
-                request.method,
-                path,
-                response.status_code,
-                duration_ms,
+                "HTTP response end | id={cid} method={method} path={path} status={status} latency_ms={latency:.2f}",
+                cid=correlation_id,
+                method=request.method,
+                path=path,
+                status=response.status_code,
+                latency=duration_ms,
             )
 
         return response

@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 from textwrap import dedent
+
+from loguru import logger
 
 from src.service.jira import JiraContext
 
 from .models import TaskPayload
-
-logger = logging.getLogger(__name__)
 
 
 class PromptBuilder:

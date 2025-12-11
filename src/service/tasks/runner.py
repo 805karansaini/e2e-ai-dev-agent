@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import os
 from pathlib import Path
 from typing import Optional
+
+from loguru import logger
 
 from src.core.config import settings
 
@@ -13,8 +14,6 @@ from .context_builder import JiraContextBuilder
 from .models import TaskPayload
 from .persistence import TaskPersistence
 from .prompt_builder import PromptBuilder
-
-logger = logging.getLogger(__name__)
 
 
 class TaskRunner:
@@ -74,7 +73,9 @@ class TaskRunner:
         self._queue = asyncio.Queue()
         self._started = True
         self._worker = asyncio.create_task(self._worker_loop(), name="task-runner")
-        logger.info("Task runner started with CLI bin '%s'.", self.cli_bin)
+        logger.info(
+            "Task runner started with CLI bin '{cli_bin}'.", cli_bin=self.cli_bin
+        )
 
     async def stop(self) -> None:
         if not self._started:
@@ -106,10 +107,10 @@ class TaskRunner:
 
         await self._queue.put(payload)
         logger.info(
-            "Enqueued task '%s' for repo '%s' (branch=%s).",
-            payload.task_id,
-            payload.repo_url,
-            payload.base_branch,
+            "Enqueued task '{task_id}' for repo '{repo}' (branch={branch}).",
+            task_id=payload.task_id,
+            repo=payload.repo_url,
+            branch=payload.base_branch,
         )
 
     async def _worker_loop(self) -> None:
@@ -129,7 +130,9 @@ class TaskRunner:
                 break
             except Exception as exc:  # noqa: BLE001
                 logger.exception(
-                    "Failed to execute CLINE task '%s': %s", payload.task_id, exc
+                    "Failed to execute CLINE task '{task_id}': {error}",
+                    task_id=payload.task_id,
+                    error=exc,
                 )
             finally:
                 queue.task_done()
