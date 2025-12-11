@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
 from src.api.app import app
-from src.core.tasks import task_runner
+from src.service.tasks import task_runner
 
 
 def test_liveness_endpoint_returns_ok() -> None:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, status
 
 from src.api.schemas import LivenessStatus, ReadinessStatus, Success, success
-from src.core.tasks import task_runner
+from src.service.tasks import task_runner
 
 router = APIRouter(prefix="/health", tags=["health"])
 

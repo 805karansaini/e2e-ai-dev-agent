@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, status
 
 from src.api.schemas import Success, TaskAccepted, TaskCreateRequest, success
-from src.core.tasks import TaskPayload, task_runner
+from src.service.tasks import TaskPayload, task_runner
 
 router = APIRouter(tags=["tasks"])
 
