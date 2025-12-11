@@ -182,7 +182,7 @@ class ClineExecutor:
                 f"CLINE CLI binary '{self.cli_bin}' not found in PATH; cannot start task."
             )
 
-        script_log_dir = Path(__file__).resolve().parents[2] / "script_log"
+        script_log_dir = Path(__file__).resolve().parents[3] / "script_log"
         script_log_dir.mkdir(parents=True, exist_ok=True)
         raw_task_id = payload.task_id or "unknown"
         safe_task_id = re.sub(r"[^A-Za-z0-9._-]", "_", raw_task_id)

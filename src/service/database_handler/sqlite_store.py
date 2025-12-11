@@ -6,6 +6,7 @@ from typing import List
 
 from src.service.jira import JiraTask
 from src.service.jira.prompt_models import SubtaskPrompt
+from src.service.tasks.models import StoredTaskPlan, SubtaskPlan
 
 
 class SQLiteTaskStore:
@@ -169,3 +170,58 @@ class SQLiteTaskStore:
                 """,
                 (task.key, issue_key, subtask_key, str(path)),
             )
+
+    def fetch_task_plan(self, task_key: str) -> StoredTaskPlan | None:
+        """Load stored prompts and metadata for a task."""
+
+        if not self._db_path.exists():
+            return None
+
+        conn = sqlite3.connect(self._db_path)
+        try:
+            self._ensure_schema(conn)
+
+            task_row = conn.execute(
+                """
+                SELECT repo_url, base_branch, detailed_description
+                FROM tasks
+                WHERE task_key = ?
+                """,
+                (task_key,),
+            ).fetchone()
+
+            if task_row is None:
+                return None
+
+            repo_url, base_branch, detailed_description = task_row
+
+            subtask_rows = conn.execute(
+                """
+                SELECT subtask_key, summary, description, prompt
+                FROM subtasks
+                WHERE task_key = ?
+                ORDER BY subtask_key
+                """,
+                (task_key,),
+            ).fetchall()
+
+            subtask_prompts = [
+                SubtaskPlan(
+                    subtask_key=subtask_key,
+                    summary=summary,
+                    description=description,
+                    prompt=prompt,
+                )
+                for subtask_key, summary, description, prompt in subtask_rows
+                if prompt
+            ]
+
+            return StoredTaskPlan(
+                task_key=task_key,
+                repo_url=repo_url or "",
+                base_branch=base_branch or "",
+                detailed_description=detailed_description,
+                subtask_prompts=subtask_prompts,
+            )
+        finally:
+            conn.close()

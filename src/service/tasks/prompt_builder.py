@@ -50,10 +50,17 @@ class PromptBuilder:
         ).strip()
 
     def _load_orchestration_prompt(self) -> str:
-        project_prompt = Path(__file__).resolve().parents[3] / "ORCHESTRATION_PROMPT.md"
-        workdir_prompt = self.base_dir / "ORCHESTRATION_PROMPT.md"
+        project_root = Path(__file__).resolve().parents[3]
+        workdir_root = self.base_dir
 
-        for prompt_path in (project_prompt, workdir_prompt):
+        candidates = [
+            project_root / "prompts" / "orchestration_prompt.md",
+            workdir_root / "prompts" / "orchestration_prompt.md",
+            project_root / "ORCHESTRATION_PROMPT.md",
+            workdir_root / "ORCHESTRATION_PROMPT.md",
+        ]
+
+        for prompt_path in candidates:
             if not prompt_path.exists():
                 continue
             try:
@@ -66,14 +73,14 @@ class PromptBuilder:
                 )
 
         logger.warning(
-            "ORCHESTRATION_PROMPT.md not found at {project} or {workdir}; using fallback prompt.",
-            project=project_prompt,
-            workdir=workdir_prompt,
+            "Orchestration prompt not found; using fallback prompt. Checked: {paths}",
+            paths=", ".join(str(p) for p in candidates),
         )
 
         return (
-            "Use the Jira description and subtask prompts below to plan work, "
-            "execute each subtask sequentially, and summarize progress as you go."
+            "You are the Task Orchestrator. Generate an execution plan and prompts for "
+            "each subtask (or the full task if none are listed). Work sequentially and "
+            "summarize as you proceed."
         )
 
 
