@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
 
 import aiohttp
+from pydantic import BaseModel, ConfigDict
 
 from src.core.config import settings
 
@@ -17,8 +17,11 @@ from .parsers import (
 )
 
 
-@dataclass(frozen=True)
-class JiraConfig:
+class JiraConfig(BaseModel):
+    """Configuration for Jira client."""
+
+    model_config = ConfigDict(frozen=True)
+
     base_url: str
     email: str
     api_token: str

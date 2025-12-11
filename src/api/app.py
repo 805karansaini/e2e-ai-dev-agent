@@ -10,7 +10,7 @@ from fastapi import FastAPI
 
 from src.api.middleware import install_logging_middleware
 from src.api.routes import health_router, tasks_router
-from src.core.tasks import task_runner
+from src.service.tasks import task_runner
 
 logger = logging.getLogger(__name__)
 
