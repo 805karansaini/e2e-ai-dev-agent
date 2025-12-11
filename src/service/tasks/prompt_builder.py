@@ -50,21 +50,30 @@ class PromptBuilder:
         ).strip()
 
     def _load_orchestration_prompt(self) -> str:
-        prompt_path = self.base_dir / "ORCHESTRATION_PROMPT.md"
-        if prompt_path.exists():
+        project_prompt = Path(__file__).resolve().parents[3] / "ORCHESTRATION_PROMPT.md"
+        workdir_prompt = self.base_dir / "ORCHESTRATION_PROMPT.md"
+
+        for prompt_path in (project_prompt, workdir_prompt):
+            if not prompt_path.exists():
+                continue
             try:
                 return prompt_path.read_text(encoding="utf-8").strip()
             except OSError as exc:
-                logger.warning("Failed to read orchestration prompt: %s", exc)
-        else:
-            logger.warning(
-                "ORCHESTRATION_PROMPT.md not found at %s; using fallback prompt.",
-                prompt_path,
-            )
+                logger.warning(
+                    "Failed to read orchestration prompt at {path}: {error}",
+                    path=prompt_path,
+                    error=exc,
+                )
+
+        logger.warning(
+            "ORCHESTRATION_PROMPT.md not found at {project} or {workdir}; using fallback prompt.",
+            project=project_prompt,
+            workdir=workdir_prompt,
+        )
 
         return (
-            "Coordinate CLINE tasks by enumerating subtasks, executing them one by one, "
-            "and tracking progress until the parent task is complete."
+            "Use the Jira description and subtask prompts below to plan work, "
+            "execute each subtask sequentially, and summarize progress as you go."
         )
 
 
