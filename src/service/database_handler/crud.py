@@ -14,12 +14,12 @@ class TaskCRUD:
         db: Session,
         task_id: str,
         sub_task_id: Optional[str] = None,
-        task_type: TaskType = TaskType.TASK,
+        task_type: str = TaskType.TASK.value,  # Accept string
         description: Optional[str] = None,
         repo_url: Optional[str] = None,
         base_branch: Optional[str] = None,
         attachment_path: Optional[Dict[str, Any]] = None,
-        status: TaskStatus = TaskStatus.PENDING,
+        status: str = TaskStatus.PENDING.value,  # Accept string
         prompt: Optional[str] = None,
         summary: Optional[str] = None,
         additional_json: Optional[Dict[str, Any]] = None,
@@ -28,12 +28,12 @@ class TaskCRUD:
         task = Task(
             task_id=task_id,
             sub_task_id=sub_task_id,
-            task_type=task_type,
+            task_type=TaskType(task_type),  # Convert string to enum
             description=description,
             repo_url=repo_url,
             base_branch=base_branch,
             attachment_path=attachment_path,
-            status=status,
+            status=TaskStatus(status),  # Convert string to enum
             prompt=prompt,
             summary=summary,
             additional_json=additional_json,

@@ -27,3 +27,4 @@ websockets==15.0.1
 yarl==1.22.0
 greenlet==3.3.0
 SQLAlchemy==2.0.45
+loguru==0.7.3

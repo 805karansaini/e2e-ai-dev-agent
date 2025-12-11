@@ -62,16 +62,24 @@ def create_task(
                     detail=f"Task with sub_task_id '{task_data.sub_task_id}' already exists"
                 )
 
+        # Convert attachment_path to dict list for JSON serialization
+        attachment_path_dict = None
+        if task_data.attachment_path:
+            attachment_path_dict = [
+                {"filename": ap.filename, "path": ap.path}
+                for ap in task_data.attachment_path
+            ]
+
         task = TaskCRUD.create_task(
             db=db,
             task_id=task_data.task_id,
             sub_task_id=task_data.sub_task_id,
-            task_type=task_data.task_type,
+            task_type=task_data.task_type,  # Already a string
             description=task_data.description,
             repo_url=task_data.repo_url,
             base_branch=task_data.base_branch,
-            attachment_path=task_data.attachment_path,
-            status=task_data.status,
+            attachment_path=attachment_path_dict,
+            status=task_data.status,  # Already a string
             prompt=task_data.prompt,
             summary=task_data.summary,
             additional_json=task_data.additional_json,
@@ -188,6 +196,13 @@ def update_task(
     try:
         # Prepare update data, excluding None values
         update_data = task_update.model_dump(exclude_unset=True)
+
+        # Convert attachment_path to dict list for JSON serialization if present
+        if "attachment_path" in update_data and update_data["attachment_path"] is not None:
+            update_data["attachment_path"] = [
+                {"filename": ap.filename, "path": ap.path}
+                for ap in update_data["attachment_path"]
+            ]
 
         # If task_id is being updated, check for conflicts
         if "task_id" in update_data and update_data["task_id"] != task_id:

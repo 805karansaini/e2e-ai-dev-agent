@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Dict, Any, Optional, List
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 from src.service.database_handler.models.task import TaskStatus, TaskType
+
+# String constants for validation
+TASK_TYPE_VALUES = [e.value for e in TaskType]
+STATUS_VALUES = [e.value for e in TaskStatus]
 
 class AttachmentPath(BaseModel):
     """Schema for attachment path."""
@@ -19,15 +23,29 @@ class TaskBase(BaseModel):
 
     task_id: str = Field(..., min_length=1, max_length=128, description="Unique task identifier")
     sub_task_id: Optional[str] = Field(None, max_length=128, description="Sub-task identifier")
-    task_type: TaskType = Field(default=TaskType.TASK, description="Type of task")
+    task_type: str = Field(default=TaskType.TASK.value, description="Type of task")
     description: Optional[str] = Field(None, description="Task description")
     repo_url: Optional[str] = Field(None, max_length=1024, description="Repository URL")
     base_branch: Optional[str] = Field(None, max_length=256, description="Base branch")
     attachment_path: Optional[List[AttachmentPath]] = Field(None, description="Attachment paths")
-    status: TaskStatus = Field(default=TaskStatus.PENDING, description="Task status")
+    status: str = Field(default=TaskStatus.PENDING.value, description="Task status")
     prompt: Optional[str] = Field(None, description="Task prompt")
     summary: Optional[str] = Field(None, description="Task summary")
     additional_json: Optional[Dict[str, Any]] = Field(None, description="Additional JSON data")
+
+    @field_validator("task_type")
+    @classmethod
+    def validate_task_type(cls, value: str) -> str:
+        if value not in TASK_TYPE_VALUES:
+            raise ValueError(f"task_type must be one of {TASK_TYPE_VALUES}")
+        return value
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str) -> str:
+        if value not in STATUS_VALUES:
+            raise ValueError(f"status must be one of {STATUS_VALUES}")
+        return value
 
 
 class TaskCreate(TaskBase):
@@ -35,18 +53,8 @@ class TaskCreate(TaskBase):
 
     model_config = ConfigDict(from_attributes=True)
 
-    # All fields are optional except task_id which is required
+    # All fields are inherited from TaskBase, but task_id is required
     task_id: str = Field(..., min_length=1, max_length=128, description="Unique task identifier")
-    sub_task_id: Optional[str] = Field(None, max_length=128, description="Sub-task identifier")
-    task_type: TaskType = Field(default=TaskType.TASK, description="Type of task")
-    description: Optional[str] = Field(None, description="Task description")
-    repo_url: Optional[str] = Field(None, max_length=1024, description="Repository URL")
-    base_branch: Optional[str] = Field(None, max_length=256, description="Base branch")
-    attachment_path: Optional[List[AttachmentPath]] = Field(None, description="Attachment paths")
-    status: TaskStatus = Field(default=TaskStatus.PENDING, description="Task status")
-    prompt: Optional[str] = Field(None, description="Task prompt")
-    summary: Optional[str] = Field(None, description="Task summary")
-    additional_json: Optional[Dict[str, Any]] = Field(None, description="Additional JSON data")
 
 
 class TaskUpdate(BaseModel):
@@ -55,17 +63,30 @@ class TaskUpdate(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     # All fields are optional for updates
-    task_id: Optional[str] = Field(None, min_length=1, max_length=128, description="Unique task identifier")
     sub_task_id: Optional[str] = Field(None, max_length=128, description="Sub-task identifier")
-    task_type: Optional[TaskType] = Field(None, description="Type of task")
+    task_type: Optional[str] = Field(None, description="Type of task")
     description: Optional[str] = Field(None, description="Task description")
     repo_url: Optional[str] = Field(None, max_length=1024, description="Repository URL")
     base_branch: Optional[str] = Field(None, max_length=256, description="Base branch")
     attachment_path: Optional[List[AttachmentPath]] = Field(None, description="Attachment paths")
-    status: Optional[TaskStatus] = Field(None, description="Task status")
+    status: Optional[str] = Field(None, description="Task status")
     prompt: Optional[str] = Field(None, description="Task prompt")
     summary: Optional[str] = Field(None, description="Task summary")
     additional_json: Optional[Dict[str, Any]] = Field(None, description="Additional JSON data")
+
+    @field_validator("task_type")
+    @classmethod
+    def validate_task_type(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and value not in TASK_TYPE_VALUES:
+            raise ValueError(f"task_type must be one of {TASK_TYPE_VALUES}")
+        return value
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and value not in STATUS_VALUES:
+            raise ValueError(f"status must be one of {STATUS_VALUES}")
+        return value
 
 
 class TaskResponse(TaskBase):
@@ -74,8 +95,16 @@ class TaskResponse(TaskBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int = Field(..., description="Primary key ID")
-    created_at: datetime = Field(..., description="Creation timestamp")
-    updated_at: datetime = Field(..., description="Last update timestamp")
+    created_at: str = Field(..., description="Creation timestamp")
+    updated_at: str = Field(..., description="Last update timestamp")
+
+    @field_validator("created_at", "updated_at", mode="before")
+    @classmethod
+    def serialize_datetime(cls, value):
+        """Convert datetime to ISO string."""
+        if isinstance(value, datetime):
+            return value.isoformat()
+        return value
 
 
 class TaskList(BaseModel):

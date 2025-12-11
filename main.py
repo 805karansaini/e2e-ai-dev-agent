@@ -13,12 +13,17 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 from src.core.config import settings  # noqa: E402
 from src.core.logging_config import setup_logging  # noqa: E402
+from src.service.database_handler import create_tables  # noqa: E402
 
 
 def run_server() -> None:
     """Run uvicorn with the configured application."""
 
     setup_logging()
+
+    # Initialize database tables
+    create_tables()
+    logger.info("Database tables initialized.")
 
     config = uvicorn.Config(
         "src.api.app:app",
