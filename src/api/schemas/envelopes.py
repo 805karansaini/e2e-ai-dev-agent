@@ -28,6 +28,8 @@ def success(data: PayloadT, status_code: int = 200) -> JSONResponse:
     """Wrap data in a success envelope JSON response."""
 
     return JSONResponse(
-        content=Success[PayloadT](data=data).model_dump(),
+        # mode="json" ensures non-JSON-native types (e.g., datetime) are serialized
+        # to JSON-friendly representations.
+        content=Success[PayloadT](data=data).model_dump(mode="json"),
         status_code=status_code,
     )
