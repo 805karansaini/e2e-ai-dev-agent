@@ -6,9 +6,9 @@ export default {
     extend: {
       colors: {
         background: {
-          DEFAULT: '#0f172a',
-          soft: '#111827',
-          softer: '#020617',
+          DEFAULT: '#f3f4f6', // app background
+          soft: '#ffffff', // surfaces / cards
+          softer: '#f9fafb', // page background
         },
         primary: {
           DEFAULT: '#3b82f6',
