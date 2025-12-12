@@ -52,6 +52,11 @@ class TaskCRUD:
         return db.query(Task).filter(Task.id == task_id).first()
 
     @staticmethod
+    def get_sub_task_by_sub_task_id(db: Session, sub_task_id: str) -> Optional[Task]:
+        """Get Sub-task by primary key ID."""
+        return db.query(Task).filter(Task.sub_task_id == sub_task_id).first()
+
+    @staticmethod
     def get_task_by_task_id(db: Session, task_id: str) -> Optional[Task]:
         """Get task by task_id field."""
         return db.query(Task).filter(Task.task_id == task_id).first()

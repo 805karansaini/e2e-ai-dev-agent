@@ -1,6 +1,9 @@
 """Pydantic schemas exposed by the API package."""
 
 from src.api.schemas.db_tasks import (
+    CreateSubTask,
+    CreateTask,
+    SubTaskUpdate,
     TaskBase,
     TaskList,
     TaskResponse,
@@ -33,6 +36,4 @@ __all__ = [
     "TaskResponse",
     "TaskList",
     "TaskSearchRequest",
-    "TaskPlanResponse",
-    "TaskStartResponse",
 ]
