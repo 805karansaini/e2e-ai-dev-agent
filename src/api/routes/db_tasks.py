@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.api.schemas import (
@@ -13,25 +12,21 @@ from src.api.schemas import (
     CreateTask,
     SubTaskUpdate,
     Success,
-    TaskBase,
     TaskList,
     TaskResponse,
-    TaskSearchRequest,
     TaskUpdate,
     success,
 )
+from src.api.services import (
+    TaskConflictError,
+    TaskNotFoundError,
+    TaskService,
+    TaskServiceError,
+)
 from src.service.database_handler.config import get_db_session
-from src.service.database_handler.crud import TaskCRUD
 from src.service.database_handler.models.task import TaskStatus, TaskType
 
 router = APIRouter(prefix="/db/tasks", tags=["database-tasks"])
-
-
-def _raise_unique_conflict() -> None:
-    raise HTTPException(
-        status_code=status.HTTP_409_CONFLICT,
-        detail="Task with given task_id or sub_task_id already exists",
-    )
 
 
 def get_db() -> Session:
@@ -43,117 +38,75 @@ def get_db() -> Session:
         db.close()
 
 
+def get_task_service(db: Session = Depends(get_db)) -> TaskService:
+    """Provide TaskService for both API handlers and internal callers."""
+    return TaskService(db)
+
+
+def _raise_http_error(exc: TaskServiceError) -> None:
+    if isinstance(exc, TaskNotFoundError):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
+    if isinstance(exc, TaskConflictError):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail=str(exc)
+        ) from exc
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)
+    ) from exc
+
+
 @router.post(
     "",
     response_model=Success[TaskResponse],
     status_code=status.HTTP_201_CREATED,
 )
 def create_task(
-    task_data: CreateTask, db: Session = Depends(get_db)
+    task_data: CreateTask, service: TaskService = Depends(get_task_service)
 ) -> Success[TaskResponse]:
     """Create a new task."""
     try:
-        # Convert attachment_path to dict list for JSON serialization
-        attachment_path_dict = None
-        if task_data.attachment_path:
-            attachment_path_dict = [
-                {"filename": ap.filename, "path": ap.path}
-                for ap in task_data.attachment_path
-            ]
+        task = service.create_task(task_data)
+    except TaskServiceError as exc:
+        _raise_http_error(exc)
 
-        task = TaskCRUD.create_task(
-            db=db,
-            task_id=task_data.task_id,
-            task_type=TaskType.TASK.value,  # Already a string
-            description=task_data.description,
-            repo_url=task_data.repo_url,
-            base_branch=task_data.base_branch,
-            attachment_path=attachment_path_dict,
-            status=task_data.status,  # Already a string
-            prompt=task_data.prompt,
-            summary=task_data.summary,
-            agent_summary=task_data.agent_summary,
-            additional_json=task_data.additional_json,
-        )
-
-        return success(
-            TaskResponse.model_validate(task), status_code=status.HTTP_201_CREATED
-        )
-
-    except HTTPException:
-        # Preserve intended client errors (e.g., conflicts/validation).
-        raise
-    except IntegrityError:
-        _raise_unique_conflict()
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create task: {str(e)}",
-        )
+    return success(
+        TaskResponse.model_validate(task), status_code=status.HTTP_201_CREATED
+    )
 
 
 @router.post(
-    "create-sub-task",
+    "/sub-task",
     response_model=Success[TaskResponse],
     status_code=status.HTTP_201_CREATED,
 )
 def create_sub_task(
-    sub_task_data: CreateSubTask, db: Session = Depends(get_db)
+    sub_task_data: CreateSubTask, service: TaskService = Depends(get_task_service)
 ) -> Success[TaskResponse]:
-    """Create a new task."""
+    """Create a new sub-task."""
     try:
-        # Convert attachment_path to dict list for JSON serialization
-        attachment_path_dict = None
-        if sub_task_data.attachment_path:
-            attachment_path_dict = [
-                {"filename": ap.filename, "path": ap.path}
-                for ap in sub_task_data.attachment_path
-            ]
+        task = service.create_sub_task(sub_task_data)
+    except TaskServiceError as exc:
+        _raise_http_error(exc)
 
-        task = TaskCRUD.create_task(
-            db=db,
-            task_id=sub_task_data.task_id,
-            sub_task_id=sub_task_data.sub_task_id,
-            task_type=TaskType.SUBTASK.value,  # Already a string
-            description=sub_task_data.description,
-            repo_url=sub_task_data.repo_url,
-            base_branch=sub_task_data.base_branch,
-            attachment_path=attachment_path_dict,
-            status=sub_task_data.status,  # Already a string
-            prompt=sub_task_data.prompt,
-            summary=sub_task_data.summary,
-            agent_summary=sub_task_data.agent_summary,
-            additional_json=sub_task_data.additional_json,
-        )
-
-        return success(
-            TaskResponse.model_validate(task), status_code=status.HTTP_201_CREATED
-        )
-
-    except HTTPException:
-        # Preserve intended client errors (e.g., conflicts/validation).
-        raise
-    except IntegrityError:
-        _raise_unique_conflict()
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create task: {str(e)}",
-        )
+    return success(
+        TaskResponse.model_validate(task), status_code=status.HTTP_201_CREATED
+    )
 
 
 @router.get(
     "/{task_id}",
     response_model=Success[TaskResponse],
 )
-def get_task(task_id: str, db: Session = Depends(get_db)) -> Success[TaskResponse]:
+def get_task(
+    task_id: str, service: TaskService = Depends(get_task_service)
+) -> Success[TaskResponse]:
     """Get a task by task_id."""
-    task = TaskCRUD.get_task_by_task_id(db, task_id)
-    if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task with task_id '{task_id}' not found",
-        )
+    try:
+        task = service.get_task(task_id)
+    except TaskServiceError as exc:
+        _raise_http_error(exc)
 
     return success(TaskResponse.model_validate(task))
 
@@ -163,15 +116,14 @@ def get_task(task_id: str, db: Session = Depends(get_db)) -> Success[TaskRespons
     response_model=Success[TaskResponse],
 )
 def get_sub_task(
-    sub_task_id: str, db: Session = Depends(get_db)
+    sub_task_id: str, service: TaskService = Depends(get_task_service)
 ) -> Success[TaskResponse]:
     """Get a task by task_id."""
-    sub_task = TaskCRUD.get_sub_task_by_sub_task_id(db, sub_task_id)
-    if not sub_task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Sub task with sub_task_id '{sub_task_id}' not found",
-        )
+    try:
+        sub_task = service.get_sub_task(sub_task_id)
+    except TaskServiceError as exc:
+        _raise_http_error(exc)
+
     return success(TaskResponse.model_validate(sub_task))
 
 
@@ -193,56 +145,23 @@ def list_tasks(
     query: Optional[str] = Query(
         None, description="Search query for description, summary, or prompt"
     ),
-    db: Session = Depends(get_db),
+    service: TaskService = Depends(get_task_service),
 ) -> Success[TaskList]:
     """List tasks with optional filters and pagination."""
     try:
-        if any([status_filter, task_type_filter, query]):
-            # Use search function
-            tasks = TaskCRUD.search_tasks(
-                db=db,
-                query=query,
-                status=status_filter,
-                task_type=task_type_filter,
-                skip=skip,
-                limit=limit,
-            )
-            # For search, we need to get total count separately
-            from src.service.database_handler.models.task import Task
-
-            total_query = db.query(Task)
-            if query:
-                from sqlalchemy import or_
-
-                search_filter = or_(
-                    Task.description.ilike(f"%{query}%"),
-                    Task.summary.ilike(f"%{query}%"),
-                    Task.prompt.ilike(f"%{query}%"),
-                )
-                total_query = total_query.filter(search_filter)
-            if status_filter:
-                total_query = total_query.filter(Task.status == status_filter)
-            if task_type_filter:
-                total_query = total_query.filter(Task.task_type == task_type_filter)
-            total = total_query.count()
-        else:
-            # Use regular list function
-            tasks = TaskCRUD.get_all_tasks(db=db, skip=skip, limit=limit)
-            from src.service.database_handler.models.task import Task
-
-            total = db.query(Task).count()
-
-        task_responses = [TaskResponse.model_validate(task) for task in tasks]
-
-        return success(
-            TaskList(tasks=task_responses, total=total, skip=skip, limit=limit)
+        tasks, total = service.list_tasks(
+            skip=skip,
+            limit=limit,
+            status_filter=status_filter,
+            task_type_filter=task_type_filter,
+            query=query,
         )
+    except TaskServiceError as exc:
+        _raise_http_error(exc)
 
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list tasks: {str(e)}",
-        )
+    task_responses = [TaskResponse.model_validate(task) for task in tasks]
+
+    return success(TaskList(tasks=task_responses, total=total, skip=skip, limit=limit))
 
 
 @router.put(
@@ -250,164 +169,60 @@ def list_tasks(
     response_model=Success[TaskResponse],
 )
 def update_task(
-    task_id: str, task_update: TaskUpdate, db: Session = Depends(get_db)
+    task_id: str,
+    task_update: TaskUpdate,
+    service: TaskService = Depends(get_task_service),
 ) -> Success[TaskResponse]:
     """Update a task by task_id."""
-    # Get the task by task_id first to find the primary key
-    task = TaskCRUD.get_task_by_task_id(db, task_id)
-    if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task with task_id '{task_id}' not found",
-        )
-
     try:
-        # Prepare update data, excluding None values
-        update_data = task_update.model_dump(exclude_unset=True)
+        updated_task = service.update_task(task_id, task_update)
+    except TaskServiceError as exc:
+        _raise_http_error(exc)
 
-        # Convert attachment_path to dict list for JSON serialization if present
-        if (
-            "attachment_path" in update_data
-            and update_data["attachment_path"] is not None
-        ):
-            update_data["attachment_path"] = [
-                {"filename": ap.filename, "path": ap.path}
-                for ap in update_data["attachment_path"]
-            ]
-
-        # Update the task using the primary key
-        updated_task = TaskCRUD.update_task(db, task.id, **update_data)
-        if not updated_task:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to update task",
-            )
-
-        return success(TaskResponse.model_validate(updated_task))
-
-    except HTTPException:
-        raise
-    except IntegrityError:
-        _raise_unique_conflict()
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update task: {str(e)}",
-        )
+    return success(TaskResponse.model_validate(updated_task))
 
 
 @router.put(
     "/sub-task/{sub_task_id}",
     response_model=Success[TaskResponse],
 )
-def update_task(
-    sub_task_id: str, task_update: SubTaskUpdate, db: Session = Depends(get_db)
+def update_sub_task(
+    sub_task_id: str,
+    task_update: SubTaskUpdate,
+    service: TaskService = Depends(get_task_service),
 ) -> Success[TaskResponse]:
     """Update a task by task_id."""
-    # Get the task by task_id first to find the primary key
-    task = TaskCRUD.get_sub_task_by_sub_task_id(db, sub_task_id)
-    if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Sub task with sub_task_id '{sub_task_id}' not found",
-        )
-
     try:
-        # Prepare update data, excluding None values
-        update_data = task_update.model_dump(exclude_unset=True)
+        updated_task = service.update_sub_task(sub_task_id, task_update)
+    except TaskServiceError as exc:
+        _raise_http_error(exc)
 
-        # Convert attachment_path to dict list for JSON serialization if present
-        if (
-            "attachment_path" in update_data
-            and update_data["attachment_path"] is not None
-        ):
-            update_data["attachment_path"] = [
-                {"filename": ap.filename, "path": ap.path}
-                for ap in update_data["attachment_path"]
-            ]
-
-        # Update the task using the primary key
-        updated_task = TaskCRUD.update_task(db, task.id, **update_data)
-        if not updated_task:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to update task",
-            )
-
-        return success(TaskResponse.model_validate(updated_task))
-
-    except HTTPException:
-        raise
-    except IntegrityError:
-        _raise_unique_conflict()
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update task: {str(e)}",
-        )
+    return success(TaskResponse.model_validate(updated_task))
 
 
 @router.delete(
     "/{task_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-def delete_task(task_id: str, db: Session = Depends(get_db)):
+def delete_task(task_id: str, service: TaskService = Depends(get_task_service)):
     """Delete a task by task_id."""
-    # Get the task by task_id first to find the primary key
-    task = TaskCRUD.get_task_by_task_id(db, task_id)
-    if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task with task_id '{task_id}' not found",
-        )
-
     try:
-        success_flag = TaskCRUD.delete_task(db, task.id)
-        if not success_flag:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to delete task",
-            )
+        service.delete_task(task_id)
+    except TaskServiceError as exc:
+        _raise_http_error(exc)
 
-        return None  # 204 No Content
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete task: {str(e)}",
-        )
+    return None  # 204 No Content
 
 
 @router.delete(
     "/sub-task/{sub_task_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-def delete_sub_task(sub_task_id: str, db: Session = Depends(get_db)):
+def delete_sub_task(sub_task_id: str, service: TaskService = Depends(get_task_service)):
     """Delete a task by task_id."""
-    # Get the task by task_id first to find the primary key
-    task = TaskCRUD.get_sub_task_by_sub_task_id(db, sub_task_id)
-    if not task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Sub task with sub_task_id '{sub_task_id}' not found",
-        )
-
     try:
-        success_flag = TaskCRUD.delete_task(db, task.id)
-        if not success_flag:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to delete task",
-            )
+        service.delete_sub_task(sub_task_id)
+    except TaskServiceError as exc:
+        _raise_http_error(exc)
 
-        return None  # 204 No Content
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete task: {str(e)}",
-        )
+    return None  # 204 No Content
