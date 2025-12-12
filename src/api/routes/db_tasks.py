@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.api.schemas import (
@@ -21,6 +22,12 @@ from src.service.database_handler.crud import TaskCRUD
 from src.service.database_handler.models.task import TaskStatus, TaskType
 
 router = APIRouter(prefix="/db-tasks", tags=["database-tasks"])
+
+def _raise_unique_conflict() -> None:
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail="Task with given task_id or sub_task_id already exists",
+    )
 
 
 def get_db() -> Session:
@@ -42,27 +49,6 @@ def create_task(
 ) -> Success[TaskResponse]:
     """Create a new task."""
     try:
-        # Check if task_id already exists
-        existing_task = TaskCRUD.get_task_by_task_id(db, task_data.task_id)
-        if existing_task:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Task with task_id '{task_data.task_id}' already exists",
-            )
-
-        # Check if sub_task_id already exists (if provided)
-        if task_data.sub_task_id:
-            from src.service.database_handler.models.task import Task
-
-            existing_sub_task = (
-                db.query(Task).filter(Task.sub_task_id == task_data.sub_task_id).first()
-            )
-            if existing_sub_task:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=f"Task with sub_task_id '{task_data.sub_task_id}' already exists",
-                )
-
         # Convert attachment_path to dict list for JSON serialization
         attachment_path_dict = None
         if task_data.attachment_path:
@@ -93,6 +79,8 @@ def create_task(
     except HTTPException:
         # Preserve intended client errors (e.g., conflicts/validation).
         raise
+    except IntegrityError:
+        _raise_unique_conflict()
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -216,15 +204,6 @@ def update_task(
                 for ap in update_data["attachment_path"]
             ]
 
-        # If task_id is being updated, check for conflicts
-        if "task_id" in update_data and update_data["task_id"] != task_id:
-            existing_task = TaskCRUD.get_task_by_task_id(db, update_data["task_id"])
-            if existing_task:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=f"Task with task_id '{update_data['task_id']}' already exists",
-                )
-
         # Update the task using the primary key
         updated_task = TaskCRUD.update_task(db, task.id, **update_data)
         if not updated_task:
@@ -237,6 +216,8 @@ def update_task(
 
     except HTTPException:
         raise
+    except IntegrityError:
+        _raise_unique_conflict()
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
