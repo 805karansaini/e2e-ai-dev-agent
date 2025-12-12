@@ -6,6 +6,9 @@ from src.api.schemas.db_tasks import (
     TaskResponse,
     TaskSearchRequest,
     TaskUpdate,
+    CreateTask,
+    SubTaskUpdate,
+    CreateSubTask,
 )
 from src.api.schemas.envelopes import ErrorResponse, Success, success
 from src.api.schemas.health import LivenessStatus, ReadinessStatus
@@ -24,4 +27,7 @@ __all__ = [
     "TaskResponse",
     "TaskList",
     "TaskSearchRequest",
+    "CreateTask",
+    "SubTaskUpdate",
+    "CreateSubTask",
 ]
