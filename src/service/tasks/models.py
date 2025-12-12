@@ -24,4 +24,38 @@ class TaskPayload(BaseModel):
         return cleaned
 
 
-__all__ = ["TaskPayload"]
+class SubtaskPlan(BaseModel):
+    """Stored prompt details for a task/subtask."""
+
+    subtask_key: str | None = Field(
+        default=None, description="Identifier for the subtask (if any)"
+    )
+    summary: str | None = Field(default=None, description="Short summary of the work")
+    description: str | None = Field(
+        default=None, description="Detailed description of the subtask"
+    )
+    prompt: str = Field(..., description="Prompt text to send to the CLI")
+
+
+class StoredTaskPlan(BaseModel):
+    """Collection of prompts and metadata persisted for a task."""
+
+    task_key: str
+    repo_url: str
+    base_branch: str
+    detailed_description: str | None = None
+    subtask_prompts: list[SubtaskPlan] = Field(default_factory=list)
+
+
+class OrchestrationResult(BaseModel):
+    """In-memory orchestration result returned by the runner."""
+
+    task_id: str
+    repo_url: str
+    base_branch: str
+    orchestration_prompt: str
+    simple_prompt: str
+    subtask_prompts: list[SubtaskPlan] = Field(default_factory=list)
+
+
+__all__ = ["TaskPayload", "SubtaskPlan", "StoredTaskPlan", "OrchestrationResult"]

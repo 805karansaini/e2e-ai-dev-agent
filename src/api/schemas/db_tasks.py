@@ -62,7 +62,7 @@ class TaskBase(BaseModel):
 
 class CreateTask(BaseModel):
     """Schema for creating a new task."""
-    
+
     task_id: str = Field(
         ..., min_length=1, max_length=128, description="Unique task identifier"
     )
@@ -86,17 +86,13 @@ class CreateTask(BaseModel):
         if value not in STATUS_VALUES:
             raise ValueError(f"status must be one of {STATUS_VALUES}")
         return value
-
 
 
 class CreateSubTask(BaseModel):
-    
     task_id: str = Field(
         ..., min_length=1, max_length=128, description="Unique task identifier"
     )
-    sub_task_id: str = Field(
-        ..., max_length=128, description="Sub-task identifier"
-    )
+    sub_task_id: str = Field(..., max_length=128, description="Sub-task identifier")
     description: Optional[str] = Field(None, description="Task description")
     summary: Optional[str] = Field(None, description="Task summary")
     repo_url: Optional[str] = Field(None, max_length=1024, description="Repository URL")
@@ -117,7 +113,7 @@ class CreateSubTask(BaseModel):
         if value not in STATUS_VALUES:
             raise ValueError(f"status must be one of {STATUS_VALUES}")
         return value
-    
+
 
 class TaskUpdate(BaseModel):
     """Schema for updating an existing task."""
@@ -157,11 +153,12 @@ class TaskUpdate(BaseModel):
             raise ValueError(f"status must be one of {STATUS_VALUES}")
         return value
 
+
 class SubTaskUpdate(BaseModel):
     """Schema for updating an existing task."""
 
     model_config = ConfigDict(from_attributes=True)
-    
+
     description: Optional[str] = Field(None, description="Task description")
     task_type: Optional[str] = Field(None, description="Type of task")
     repo_url: Optional[str] = Field(None, max_length=1024, description="Repository URL")
@@ -190,7 +187,6 @@ class SubTaskUpdate(BaseModel):
         if value is not None and value not in STATUS_VALUES:
             raise ValueError(f"status must be one of {STATUS_VALUES}")
         return value
-
 
 
 class TaskResponse(TaskBase):

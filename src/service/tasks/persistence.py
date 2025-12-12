@@ -3,10 +3,10 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from src.service.database_handler import SQLiteTaskStore
-from src.service.jira import JiraContext
+from service.database_handler import SQLiteTaskStore
+from service.jira import JiraContext
 
-from .models import TaskPayload
+from .models import StoredTaskPlan, TaskPayload
 
 
 class TaskPersistence:
@@ -29,6 +29,9 @@ class TaskPersistence:
             payload.repo_url,
             payload.base_branch,
         )
+
+    async def load_plan(self, task_key: str) -> StoredTaskPlan | None:
+        return await asyncio.to_thread(self._store.fetch_task_plan, task_key)
 
 
 __all__ = ["TaskPersistence"]

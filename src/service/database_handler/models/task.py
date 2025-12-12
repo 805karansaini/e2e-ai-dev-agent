@@ -34,7 +34,7 @@ class Task(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     task_id = Column(String(128), index=True)
-    sub_task_id = Column(String(128), unique=True, index=True,nullable=True)
+    sub_task_id = Column(String(128), unique=True, index=True, nullable=True)
 
     task_type = Column(Enum(TaskType), nullable=False, default=TaskType.TASK)
 

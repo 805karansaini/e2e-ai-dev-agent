@@ -9,15 +9,16 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from src.api.schemas import (
+    CreateSubTask,
+    CreateTask,
+    SubTaskUpdate,
     Success,
     TaskBase,
     TaskList,
     TaskResponse,
-    CreateTask,
-    SubTaskUpdate,
+    TaskSearchRequest,
     TaskUpdate,
     success,
-    CreateSubTask,
 )
 from src.service.database_handler.config import get_db_session
 from src.service.database_handler.crud import TaskCRUD
@@ -90,6 +91,7 @@ def create_task(
             detail=f"Failed to create task: {str(e)}",
         )
 
+
 @router.post(
     "create-sub-task",
     response_model=Success[TaskResponse],
@@ -140,7 +142,6 @@ def create_sub_task(
         )
 
 
-
 @router.get(
     "/{task_id}",
     response_model=Success[TaskResponse],
@@ -161,7 +162,9 @@ def get_task(task_id: str, db: Session = Depends(get_db)) -> Success[TaskRespons
     "/sub-task/{sub_task_id}",
     response_model=Success[TaskResponse],
 )
-def get_sub_task(sub_task_id: str, db: Session = Depends(get_db)) -> Success[TaskResponse]:
+def get_sub_task(
+    sub_task_id: str, db: Session = Depends(get_db)
+) -> Success[TaskResponse]:
     """Get a task by task_id."""
     sub_task = TaskCRUD.get_sub_task_by_sub_task_id(db, sub_task_id)
     if not sub_task:
@@ -291,6 +294,7 @@ def update_task(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update task: {str(e)}",
         )
+
 
 @router.put(
     "/sub-task/{sub_task_id}",

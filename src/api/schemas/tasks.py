@@ -23,3 +23,52 @@ class TaskAccepted(BaseModel):
 
     task_id: str
     message: str = "task accepted"
+
+
+class SubtaskPromptSchema(BaseModel):
+    """Prompt details for an individual task/subtask."""
+
+    subtask_key: str | None = Field(
+        default=None, description="Identifier for the subtask (if applicable)"
+    )
+    summary: str | None = Field(default=None, description="Short summary of the work")
+    description: str | None = Field(
+        default=None, description="Detailed description of the subtask"
+    )
+    prompt: str = Field(..., description="Prompt text to feed into the CLI")
+
+
+class TaskPlanResponse(BaseModel):
+    """Orchestration output that captures the prompts and plan."""
+
+    task_id: str
+    repo_url: str
+    base_branch: str
+    orchestration_prompt: str
+    simple_prompt: str
+    subtask_prompts: list[SubtaskPromptSchema] = Field(
+        default_factory=list,
+        description="Prompts for each subtask to run later",
+    )
+    message: str = "task plan generated"
+
+
+class TaskStartResponse(BaseModel):
+    """Execution start acknowledgement."""
+
+    task_id: str
+    started_subtasks: list[str] = Field(
+        default_factory=list, description="Identifiers for the queued/started subtasks"
+    )
+    message: str = "task execution started"
+
+
+class TaskAutoResponse(BaseModel):
+    """Combined orchestration + execution acknowledgement."""
+
+    task_id: str
+    orchestration_prompt: str
+    started_subtasks: list[str] = Field(
+        default_factory=list, description="Identifiers for the started subtasks"
+    )
+    message: str = "orchestration and execution started"
