@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Dict, Any, Optional, List
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from src.service.database_handler.models.task import TaskStatus, TaskType
 
@@ -12,8 +13,10 @@ from src.service.database_handler.models.task import TaskStatus, TaskType
 TASK_TYPE_VALUES = [e.value for e in TaskType]
 STATUS_VALUES = [e.value for e in TaskStatus]
 
+
 class AttachmentPath(BaseModel):
     """Schema for attachment path."""
+
     filename: str = Field(..., description="Attachment filename")
     path: str = Field(..., description="Attachment path")
 
@@ -21,17 +24,25 @@ class AttachmentPath(BaseModel):
 class TaskBase(BaseModel):
     """Base schema for Task with common fields."""
 
-    task_id: str = Field(..., min_length=1, max_length=128, description="Unique task identifier")
-    sub_task_id: Optional[str] = Field(None, max_length=128, description="Sub-task identifier")
+    task_id: str = Field(
+        ..., min_length=1, max_length=128, description="Unique task identifier"
+    )
+    sub_task_id: Optional[str] = Field(
+        None, max_length=128, description="Sub-task identifier"
+    )
     task_type: str = Field(default=TaskType.TASK.value, description="Type of task")
     description: Optional[str] = Field(None, description="Task description")
     repo_url: Optional[str] = Field(None, max_length=1024, description="Repository URL")
     base_branch: Optional[str] = Field(None, max_length=256, description="Base branch")
-    attachment_path: Optional[List[AttachmentPath]] = Field(None, description="Attachment paths")
+    attachment_path: Optional[List[AttachmentPath]] = Field(
+        None, description="Attachment paths"
+    )
     status: str = Field(default=TaskStatus.PENDING.value, description="Task status")
     prompt: Optional[str] = Field(None, description="Task prompt")
     summary: Optional[str] = Field(None, description="Task summary")
-    additional_json: Optional[Dict[str, Any]] = Field(None, description="Additional JSON data")
+    additional_json: Optional[Dict[str, Any]] = Field(
+        None, description="Additional JSON data"
+    )
 
     @field_validator("task_type")
     @classmethod
@@ -54,7 +65,9 @@ class TaskCreate(TaskBase):
     model_config = ConfigDict(from_attributes=True)
 
     # All fields are inherited from TaskBase, but task_id is required
-    task_id: str = Field(..., min_length=1, max_length=128, description="Unique task identifier")
+    task_id: str = Field(
+        ..., min_length=1, max_length=128, description="Unique task identifier"
+    )
 
 
 class TaskUpdate(BaseModel):
@@ -63,16 +76,22 @@ class TaskUpdate(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     # All fields are optional for updates
-    sub_task_id: Optional[str] = Field(None, max_length=128, description="Sub-task identifier")
+    sub_task_id: Optional[str] = Field(
+        None, max_length=128, description="Sub-task identifier"
+    )
     task_type: Optional[str] = Field(None, description="Type of task")
     description: Optional[str] = Field(None, description="Task description")
     repo_url: Optional[str] = Field(None, max_length=1024, description="Repository URL")
     base_branch: Optional[str] = Field(None, max_length=256, description="Base branch")
-    attachment_path: Optional[List[AttachmentPath]] = Field(None, description="Attachment paths")
+    attachment_path: Optional[List[AttachmentPath]] = Field(
+        None, description="Attachment paths"
+    )
     status: Optional[str] = Field(None, description="Task status")
     prompt: Optional[str] = Field(None, description="Task prompt")
     summary: Optional[str] = Field(None, description="Task summary")
-    additional_json: Optional[Dict[str, Any]] = Field(None, description="Additional JSON data")
+    additional_json: Optional[Dict[str, Any]] = Field(
+        None, description="Additional JSON data"
+    )
 
     @field_validator("task_type")
     @classmethod
@@ -119,8 +138,12 @@ class TaskList(BaseModel):
 class TaskSearchRequest(BaseModel):
     """Schema for task search request."""
 
-    query: Optional[str] = Field(None, description="Search query for description, summary, or prompt")
+    query: Optional[str] = Field(
+        None, description="Search query for description, summary, or prompt"
+    )
     status: Optional[TaskStatus] = Field(None, description="Filter by task status")
     task_type: Optional[TaskType] = Field(None, description="Filter by task type")
     skip: int = Field(default=0, ge=0, description="Number of tasks to skip")
-    limit: Optional[int] = Field(None, gt=0, le=1000, description="Maximum number of tasks to return")
+    limit: Optional[int] = Field(
+        None, gt=0, le=1000, description="Maximum number of tasks to return"
+    )

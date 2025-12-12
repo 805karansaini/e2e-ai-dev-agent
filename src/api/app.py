@@ -9,7 +9,7 @@ from fastapi import FastAPI
 from loguru import logger
 
 from src.api.middleware import install_logging_middleware
-from src.api.routes import health_router, tasks_router, db_tasks_router
+from src.api.routes import db_tasks_router, health_router, tasks_router
 from src.service.tasks import task_runner
 
 

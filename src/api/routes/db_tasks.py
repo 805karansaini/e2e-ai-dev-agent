@@ -3,21 +3,22 @@
 from __future__ import annotations
 
 from typing import List, Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from src.api.schemas import (
     Success,
     TaskCreate,
-    TaskUpdate,
-    TaskResponse,
     TaskList,
+    TaskResponse,
     TaskSearchRequest,
+    TaskUpdate,
     success,
 )
+from src.service.database_handler.config import get_db_session
 from src.service.database_handler.crud import TaskCRUD
 from src.service.database_handler.models.task import TaskStatus, TaskType
-from src.service.database_handler.config import get_db_session
 
 router = APIRouter(prefix="/db-tasks", tags=["database-tasks"])
 
@@ -37,8 +38,7 @@ def get_db() -> Session:
     status_code=status.HTTP_201_CREATED,
 )
 def create_task(
-    task_data: TaskCreate,
-    db: Session = Depends(get_db)
+    task_data: TaskCreate, db: Session = Depends(get_db)
 ) -> Success[TaskResponse]:
     """Create a new task."""
     try:
@@ -47,19 +47,20 @@ def create_task(
         if existing_task:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Task with task_id '{task_data.task_id}' already exists"
+                detail=f"Task with task_id '{task_data.task_id}' already exists",
             )
 
         # Check if sub_task_id already exists (if provided)
         if task_data.sub_task_id:
             from src.service.database_handler.models.task import Task
-            existing_sub_task = db.query(Task).filter(
-                Task.sub_task_id == task_data.sub_task_id
-            ).first()
+
+            existing_sub_task = (
+                db.query(Task).filter(Task.sub_task_id == task_data.sub_task_id).first()
+            )
             if existing_sub_task:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail=f"Task with sub_task_id '{task_data.sub_task_id}' already exists"
+                    detail=f"Task with sub_task_id '{task_data.sub_task_id}' already exists",
                 )
 
         # Convert attachment_path to dict list for JSON serialization
@@ -85,12 +86,17 @@ def create_task(
             additional_json=task_data.additional_json,
         )
 
-        return success(TaskResponse.model_validate(task), status_code=status.HTTP_201_CREATED)
+        return success(
+            TaskResponse.model_validate(task), status_code=status.HTTP_201_CREATED
+        )
 
+    except HTTPException:
+        # Preserve intended client errors (e.g., conflicts/validation).
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create task: {str(e)}"
+            detail=f"Failed to create task: {str(e)}",
         )
 
 
@@ -98,16 +104,13 @@ def create_task(
     "/{task_id}",
     response_model=Success[TaskResponse],
 )
-def get_task(
-    task_id: str,
-    db: Session = Depends(get_db)
-) -> Success[TaskResponse]:
+def get_task(task_id: str, db: Session = Depends(get_db)) -> Success[TaskResponse]:
     """Get a task by task_id."""
     task = TaskCRUD.get_task_by_task_id(db, task_id)
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task with task_id '{task_id}' not found"
+            detail=f"Task with task_id '{task_id}' not found",
         )
 
     return success(TaskResponse.model_validate(task))
@@ -119,11 +122,19 @@ def get_task(
 )
 def list_tasks(
     skip: int = Query(0, ge=0, description="Number of tasks to skip"),
-    limit: Optional[int] = Query(None, gt=0, le=1000, description="Maximum number of tasks to return"),
-    status_filter: Optional[TaskStatus] = Query(None, description="Filter by task status"),
-    task_type_filter: Optional[TaskType] = Query(None, description="Filter by task type"),
-    query: Optional[str] = Query(None, description="Search query for description, summary, or prompt"),
-    db: Session = Depends(get_db)
+    limit: Optional[int] = Query(
+        None, gt=0, le=1000, description="Maximum number of tasks to return"
+    ),
+    status_filter: Optional[TaskStatus] = Query(
+        None, description="Filter by task status"
+    ),
+    task_type_filter: Optional[TaskType] = Query(
+        None, description="Filter by task type"
+    ),
+    query: Optional[str] = Query(
+        None, description="Search query for description, summary, or prompt"
+    ),
+    db: Session = Depends(get_db),
 ) -> Success[TaskList]:
     """List tasks with optional filters and pagination."""
     try:
@@ -135,17 +146,19 @@ def list_tasks(
                 status=status_filter,
                 task_type=task_type_filter,
                 skip=skip,
-                limit=limit
+                limit=limit,
             )
             # For search, we need to get total count separately
             from src.service.database_handler.models.task import Task
+
             total_query = db.query(Task)
             if query:
                 from sqlalchemy import or_
+
                 search_filter = or_(
                     Task.description.ilike(f"%{query}%"),
                     Task.summary.ilike(f"%{query}%"),
-                    Task.prompt.ilike(f"%{query}%")
+                    Task.prompt.ilike(f"%{query}%"),
                 )
                 total_query = total_query.filter(search_filter)
             if status_filter:
@@ -157,21 +170,19 @@ def list_tasks(
             # Use regular list function
             tasks = TaskCRUD.get_all_tasks(db=db, skip=skip, limit=limit)
             from src.service.database_handler.models.task import Task
+
             total = db.query(Task).count()
 
         task_responses = [TaskResponse.model_validate(task) for task in tasks]
 
-        return success(TaskList(
-            tasks=task_responses,
-            total=total,
-            skip=skip,
-            limit=limit
-        ))
+        return success(
+            TaskList(tasks=task_responses, total=total, skip=skip, limit=limit)
+        )
 
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list tasks: {str(e)}"
+            detail=f"Failed to list tasks: {str(e)}",
         )
 
 
@@ -180,9 +191,7 @@ def list_tasks(
     response_model=Success[TaskResponse],
 )
 def update_task(
-    task_id: str,
-    task_update: TaskUpdate,
-    db: Session = Depends(get_db)
+    task_id: str, task_update: TaskUpdate, db: Session = Depends(get_db)
 ) -> Success[TaskResponse]:
     """Update a task by task_id."""
     # Get the task by task_id first to find the primary key
@@ -190,7 +199,7 @@ def update_task(
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task with task_id '{task_id}' not found"
+            detail=f"Task with task_id '{task_id}' not found",
         )
 
     try:
@@ -198,7 +207,10 @@ def update_task(
         update_data = task_update.model_dump(exclude_unset=True)
 
         # Convert attachment_path to dict list for JSON serialization if present
-        if "attachment_path" in update_data and update_data["attachment_path"] is not None:
+        if (
+            "attachment_path" in update_data
+            and update_data["attachment_path"] is not None
+        ):
             update_data["attachment_path"] = [
                 {"filename": ap.filename, "path": ap.path}
                 for ap in update_data["attachment_path"]
@@ -210,7 +222,7 @@ def update_task(
             if existing_task:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
-                    detail=f"Task with task_id '{update_data['task_id']}' already exists"
+                    detail=f"Task with task_id '{update_data['task_id']}' already exists",
                 )
 
         # Update the task using the primary key
@@ -218,7 +230,7 @@ def update_task(
         if not updated_task:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to update task"
+                detail="Failed to update task",
             )
 
         return success(TaskResponse.model_validate(updated_task))
@@ -228,7 +240,7 @@ def update_task(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update task: {str(e)}"
+            detail=f"Failed to update task: {str(e)}",
         )
 
 
@@ -236,17 +248,14 @@ def update_task(
     "/{task_id}",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-def delete_task(
-    task_id: str,
-    db: Session = Depends(get_db)
-):
+def delete_task(task_id: str, db: Session = Depends(get_db)):
     """Delete a task by task_id."""
     # Get the task by task_id first to find the primary key
     task = TaskCRUD.get_task_by_task_id(db, task_id)
     if not task:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task with task_id '{task_id}' not found"
+            detail=f"Task with task_id '{task_id}' not found",
         )
 
     try:
@@ -254,7 +263,7 @@ def delete_task(
         if not success_flag:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to delete task"
+                detail="Failed to delete task",
             )
 
         return None  # 204 No Content
@@ -264,5 +273,5 @@ def delete_task(
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete task: {str(e)}"
+            detail=f"Failed to delete task: {str(e)}",
         )

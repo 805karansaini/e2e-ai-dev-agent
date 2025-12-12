@@ -1,9 +1,10 @@
-from typing import List, Optional, Dict, Any
-from sqlalchemy.orm import Session
-from sqlalchemy import  or_
+from typing import Any, Dict, List, Optional
 
-from .models.task import Task,  TaskStatus, TaskType
+from sqlalchemy import or_
+from sqlalchemy.orm import Session
+
 from .config import get_db_session
+from .models.task import Task, TaskStatus, TaskType
 
 
 class TaskCRUD:
@@ -59,7 +60,9 @@ class TaskCRUD:
         return db.query(Task).filter(Task.status == status).all()
 
     @staticmethod
-    def get_all_tasks(db: Session, skip: int = 0, limit: Optional[int] = None) -> List[Task]:
+    def get_all_tasks(
+        db: Session, skip: int = 0, limit: Optional[int] = None
+    ) -> List[Task]:
         """Get all tasks with optional pagination."""
         query = db.query(Task).offset(skip)
         if limit:
@@ -67,11 +70,7 @@ class TaskCRUD:
         return query.all()
 
     @staticmethod
-    def update_task(
-        db: Session,
-        task_id: int,
-        **kwargs
-    ) -> Optional[Task]:
+    def update_task(db: Session, task_id: int, **kwargs) -> Optional[Task]:
         """Update task fields."""
         task = db.query(Task).filter(Task.id == task_id).first()
         if not task:
@@ -86,7 +85,9 @@ class TaskCRUD:
         return task
 
     @staticmethod
-    def update_task_status(db: Session, task_id: int, status: TaskStatus) -> Optional[Task]:
+    def update_task_status(
+        db: Session, task_id: int, status: TaskStatus
+    ) -> Optional[Task]:
         """Update task status."""
         return TaskCRUD.update_task(db, task_id, status=status)
 
@@ -108,7 +109,7 @@ class TaskCRUD:
         status: Optional[TaskStatus] = None,
         task_type: Optional[TaskType] = None,
         skip: int = 0,
-        limit: Optional[int] = None
+        limit: Optional[int] = None,
     ) -> List[Task]:
         """Search tasks with filters."""
         q = db.query(Task)
@@ -118,7 +119,7 @@ class TaskCRUD:
             search_filter = or_(
                 Task.description.ilike(f"%{query}%"),
                 Task.summary.ilike(f"%{query}%"),
-                Task.prompt.ilike(f"%{query}%")
+                Task.prompt.ilike(f"%{query}%"),
             )
             q = q.filter(search_filter)
 
@@ -143,6 +144,7 @@ def create_task_with_session(**kwargs) -> Task:
         return TaskCRUD.create_task(db, **kwargs)
     finally:
         db.close()
+
 
 def get_task_with_session(task_id: int) -> Optional[Task]:
     """Get task by ID with automatic session management."""

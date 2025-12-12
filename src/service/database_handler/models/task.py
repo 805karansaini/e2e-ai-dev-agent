@@ -1,14 +1,15 @@
 from __future__ import annotations
+
 import enum
 
 from sqlalchemy import (
+    JSON,
     Column,
+    DateTime,
+    Enum,
     Integer,
     String,
     Text,
-    JSON,
-    Enum,
-    DateTime,
     func,
 )
 
@@ -20,6 +21,7 @@ class TaskStatus(enum.Enum):
     SUCCESS = "SUCCESS"
     FAILED = "FAILED"
 
+
 class TaskType(enum.Enum):
     TASK = "TASK"
     SUBTASK = "SUBTASK"
@@ -27,6 +29,7 @@ class TaskType(enum.Enum):
 
 class Task(Base):
     """Represents a top-level task."""
+
     __tablename__ = "tasks"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -48,10 +51,12 @@ class Task(Base):
 
     additional_json = Column(JSON, nullable=True)
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
     updated_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
-        nullable=False
+        nullable=False,
     )
