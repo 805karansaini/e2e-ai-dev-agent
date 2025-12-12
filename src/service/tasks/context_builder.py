@@ -79,9 +79,6 @@ class JiraContextBuilder:
         return dedent(
             f"""
             Jira task {task.key}: {task.summary or 'No summary provided'}
-            Status: {status} | Priority: {priority}
-            Assignee: {assignee} | Reporter: {reporter}
-            Labels: {labels}
             Description:
             {task.description or 'No description provided.'}
 
@@ -136,12 +133,6 @@ class JiraContextBuilder:
             {header}
             Details:
             {subtask_description}
-
-            Deliverable:
-            Implement this work in the repository. Reference any downloaded Jira
-            attachments under {self.attachments_dir / task.key} (subtasks use a
-            nested directory named after their key). Keep changes focused on this
-            subtask's scope.
             """
         ).strip()
 

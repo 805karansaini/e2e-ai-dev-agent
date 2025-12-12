@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from src.service.database_handler import SQLiteTaskStore
-from src.service.jira import JiraContext
+from service.database_handler import SQLiteTaskStore
+from service.jira import JiraContext
 
 from .models import StoredTaskPlan, TaskPayload
 

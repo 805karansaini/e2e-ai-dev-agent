@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from textwrap import dedent
+from typing import Iterable
 
 from loguru import logger
 
@@ -19,35 +20,86 @@ class PromptBuilder:
 
     def compose(self, context: JiraContext, payload: TaskPayload) -> str:
         orchestration = self._load_orchestration_prompt()
-        subtask_section = (
-            "\n\n".join(
-                f"- {sub.key}: {sub.summary or 'No summary'}\n{sub.prompt}"
-                for sub in context.subtask_prompts
+        jira_context_block = self._render_jira_context(context)
+        attachments_note = self._render_attachments_note(context)
+
+        lines: list[str] = []
+        lines.append(orchestration.strip())
+        lines.append("")
+        lines.append(jira_context_block.strip())
+        lines.append("")
+        lines.append("=== REPOSITORY CONTEXT ===")
+        lines.append(f"Repository URL: {payload.repo_url}")
+        lines.append(f"Base branch: {payload.base_branch}")
+        lines.append(attachments_note.strip())
+        return "\n".join(lines).strip()
+
+    def _render_jira_context(self, context: JiraContext) -> str:
+        task = context.task
+        labels = ", ".join(task.labels) if task.labels else "None"
+        summary = task.summary or "No summary provided"
+        description = task.description or "No description provided."
+
+        subtasks = list(task.subtasks)
+        lines: list[str] = []
+        lines.append("=== JIRA CONTEXT ===")
+        lines.append(f"Main task: {task.key}: {summary}")
+        lines.append(f"Labels: {labels}")
+        lines.append("Description:")
+        lines.extend(self._indent_block(description, prefix="  "))
+        lines.append("")
+        lines.append("Subtasks:")
+
+        if not subtasks:
+            lines.append(
+                "- (none) Jira has no subtasks; treat the main task as one work item."
             )
-            or "No subtasks identified; treat the parent task as a single work item."
-        )
+        else:
+            for sub in subtasks:
+                sub_summary = sub.summary or "No summary"
+                lines.append(f"- {sub.key}: {sub_summary}")
+                sub_description = (
+                    sub.description or "No description provided."
+                ).strip()
+                lines.append("  Description:")
+                lines.extend(self._indent_block(sub_description, prefix="    "))
 
-        attachments_note = (
-            f"Attachments downloaded under {self.attachments_dir} matching Jira keys."
-            if context.attachments
-            else "No attachments were available in Jira."
-        )
+        return "\n".join(lines).strip()
 
-        return dedent(
-            f"""
-            {orchestration}
+    def _render_attachments_note(self, context: JiraContext) -> str:
+        if not context.attachments:
+            return "Attachments: none"
 
-            === Jira Context ===
-            {context.detailed_description}
+        task_dir = self.attachments_dir / context.task.key
+        samples = self._format_attachment_samples(context.attachments, limit=8)
+        samples_block = "\n".join(f"- {item}" for item in samples)
 
-            Subtask prompts:
-            {subtask_section}
+        lines: list[str] = []
+        lines.append(f"Attachments: {len(context.attachments)} file(s) downloaded.")
+        lines.append(f"Attachments base dir: {task_dir}")
+        lines.append("Sample files:")
+        lines.extend(self._indent_block(samples_block, prefix="  "))
+        return "\n".join(lines).strip()
 
-            Repository: {payload.repo_url}
-            Base branch: {payload.base_branch}
-            {attachments_note}
-            """
-        ).strip()
+    @staticmethod
+    def _format_attachment_samples(paths: Iterable[Path], *, limit: int) -> list[str]:
+        items: list[str] = []
+        for idx, p in enumerate(paths):
+            if idx >= limit:
+                break
+            items.append(str(p))
+        if len(items) == limit:
+            items.append("... (more omitted)")
+        return items
+
+    @staticmethod
+    def _indent_block(text: str, *, prefix: str) -> list[str]:
+        text = (text or "").rstrip()
+        if not text:
+            return [f"{prefix}(empty)"]
+        return [
+            f"{prefix}{line}" if line else prefix.rstrip() for line in text.splitlines()
+        ]
 
     def _load_orchestration_prompt(self) -> str:
         project_root = Path(__file__).resolve().parents[3]
