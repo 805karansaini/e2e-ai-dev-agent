@@ -78,6 +78,11 @@ class TaskCRUD:
 
         for key, value in kwargs.items():
             if hasattr(task, key):
+                if value is not None:
+                    if key == "status" and isinstance(value, str):
+                        value = TaskStatus(value)
+                    elif key == "task_type" and isinstance(value, str):
+                        value = TaskType(value)
                 setattr(task, key, value)
 
         db.commit()
