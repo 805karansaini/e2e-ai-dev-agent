@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-background text-slate-100 antialiased;
+  }
+
+  ::selection {
+    @apply bg-primary-soft text-slate-900;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-background-soft/70 border border-slate-800/80 shadow-soft rounded-xl backdrop-blur-lg;
+  }
+
+  .input-base {
+    @apply w-full rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-50 placeholder-slate-500 shadow-inner outline-none transition-colors duration-150 focus:border-primary-soft focus:ring-2 focus:ring-primary/40;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-slate-50 shadow hover:bg-primary-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-soft focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 disabled:cursor-not-allowed disabled:opacity-60 transition-colors;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center rounded-lg bg-slate-800/40 px-3 py-2 text-sm font-medium text-slate-200 hover:bg-slate-700/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-soft focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 disabled:cursor-not-allowed disabled:opacity-60 transition-colors;
+  }
+}
+
+
