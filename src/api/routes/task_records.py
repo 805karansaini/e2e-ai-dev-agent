@@ -1,4 +1,4 @@
-"""Database Task CRUD endpoints."""
+"""Task record CRUD endpoints (database-backed)."""
 
 from __future__ import annotations
 

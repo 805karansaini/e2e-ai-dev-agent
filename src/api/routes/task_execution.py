@@ -1,4 +1,4 @@
-"""Task endpoints."""
+"""Task orchestration and execution endpoints."""
 
 from __future__ import annotations
 
