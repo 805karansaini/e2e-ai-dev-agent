@@ -64,6 +64,7 @@ log_debug "[RUN_CLINE_V1][debug] prompt: $PROMPT"
 log_debug "[RUN_CLINE_V1][debug] extra args: $*"
 log_debug "[RUN_CLINE_V1][debug] log path: $LOG_PATH"
 log_debug "[RUN_CLINE_V1][debug] task id: $SAFE_TASK_ID"
+log_debug "[RUN_CLINE_V1][debug] command: cline $* -F json -y --mode act PROMPT"
 
 # Run Cline, persist raw log, then echo the raw log.
 cline "$@" -F json -y --mode act "$PROMPT" >"$LOG_PATH"
