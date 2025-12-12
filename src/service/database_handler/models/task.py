@@ -48,6 +48,7 @@ class Task(Base):
 
     prompt = Column(Text, nullable=True)
     summary = Column(Text, nullable=True)
+    agent_summary = Column(Text, nullable=True)
 
     additional_json = Column(JSON, nullable=True)
 

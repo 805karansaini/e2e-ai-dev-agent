@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from src.api.schemas import (
     Success,
-    TaskCreate,
+    TaskBase,
     TaskList,
     TaskResponse,
     TaskSearchRequest,
@@ -22,6 +22,7 @@ from src.service.database_handler.crud import TaskCRUD
 from src.service.database_handler.models.task import TaskStatus, TaskType
 
 router = APIRouter(prefix="/db-tasks", tags=["database-tasks"])
+
 
 def _raise_unique_conflict() -> None:
     raise HTTPException(
@@ -45,7 +46,7 @@ def get_db() -> Session:
     status_code=status.HTTP_201_CREATED,
 )
 def create_task(
-    task_data: TaskCreate, db: Session = Depends(get_db)
+    task_data: TaskBase, db: Session = Depends(get_db)
 ) -> Success[TaskResponse]:
     """Create a new task."""
     try:
@@ -69,6 +70,7 @@ def create_task(
             status=task_data.status,  # Already a string
             prompt=task_data.prompt,
             summary=task_data.summary,
+            agent_summary=task_data.agent_summary,
             additional_json=task_data.additional_json,
         )
 

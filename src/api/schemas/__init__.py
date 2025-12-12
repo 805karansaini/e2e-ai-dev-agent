@@ -2,7 +2,6 @@
 
 from src.api.schemas.db_tasks import (
     TaskBase,
-    TaskCreate,
     TaskList,
     TaskResponse,
     TaskSearchRequest,
@@ -21,7 +20,6 @@ __all__ = [
     "TaskAccepted",
     "TaskCreateRequest",
     "TaskBase",
-    "TaskCreate",
     "TaskUpdate",
     "TaskResponse",
     "TaskList",

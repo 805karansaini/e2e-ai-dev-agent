@@ -23,6 +23,7 @@ class TaskCRUD:
         status: str = TaskStatus.PENDING.value,  # Accept string
         prompt: Optional[str] = None,
         summary: Optional[str] = None,
+        agent_summary: Optional[str] = None,
         additional_json: Optional[Dict[str, Any]] = None,
     ) -> Task:
         """Create a new task."""
@@ -37,6 +38,7 @@ class TaskCRUD:
             status=TaskStatus(status),  # Convert string to enum
             prompt=prompt,
             summary=summary,
+            agent_summary=agent_summary,
             additional_json=additional_json,
         )
         db.add(task)

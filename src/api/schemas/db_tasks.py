@@ -32,6 +32,7 @@ class TaskBase(BaseModel):
     )
     task_type: str = Field(default=TaskType.TASK.value, description="Type of task")
     description: Optional[str] = Field(None, description="Task description")
+    summary: Optional[str] = Field(None, description="Task summary")
     repo_url: Optional[str] = Field(None, max_length=1024, description="Repository URL")
     base_branch: Optional[str] = Field(None, max_length=256, description="Base branch")
     attachment_path: Optional[List[AttachmentPath]] = Field(
@@ -39,7 +40,7 @@ class TaskBase(BaseModel):
     )
     status: str = Field(default=TaskStatus.PENDING.value, description="Task status")
     prompt: Optional[str] = Field(None, description="Task prompt")
-    summary: Optional[str] = Field(None, description="Task summary")
+    agent_summary: Optional[str] = Field(None, description="Agent summary")
     additional_json: Optional[Dict[str, Any]] = Field(
         None, description="Additional JSON data"
     )
@@ -57,17 +58,6 @@ class TaskBase(BaseModel):
         if value not in STATUS_VALUES:
             raise ValueError(f"status must be one of {STATUS_VALUES}")
         return value
-
-
-class TaskCreate(TaskBase):
-    """Schema for creating a new task."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    # All fields are inherited from TaskBase, but task_id is required
-    task_id: str = Field(
-        ..., min_length=1, max_length=128, description="Unique task identifier"
-    )
 
 
 class TaskUpdate(BaseModel):
@@ -89,6 +79,7 @@ class TaskUpdate(BaseModel):
     status: Optional[str] = Field(None, description="Task status")
     prompt: Optional[str] = Field(None, description="Task prompt")
     summary: Optional[str] = Field(None, description="Task summary")
+    agent_summary: Optional[str] = Field(None, description="Agent summary")
     additional_json: Optional[Dict[str, Any]] = Field(
         None, description="Additional JSON data"
     )
