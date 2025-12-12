@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import aiohttp
 from pydantic import BaseModel, ConfigDict
 
 from src.core.config import settings
 
-from .models import JiraAttachment, JiraSubtask, JiraTask
+from .models import JiraAttachment, JiraComment, JiraSubtask, JiraTask
 from .parsers import (
     parse_jira_attachment,
     parse_jira_comment,
@@ -51,6 +51,25 @@ class JiraClient:
         self.config = config
         self._session = session
         self._owns_session = session is None
+
+    @staticmethod
+    def _build_adf_doc(text: str) -> Dict[str, Any]:
+        """
+        Convert plain text to a minimal Atlassian Document Format (ADF) payload.
+
+        Jira Cloud expects rich text fields (description, comments) as ADF. This
+        helper keeps the client API simple by accepting plain strings.
+        """
+        return {
+            "type": "doc",
+            "version": 1,
+            "content": [
+                {
+                    "type": "paragraph",
+                    "content": [{"type": "text", "text": text or ""}],
+                }
+            ],
+        }
 
     async def __aenter__(self) -> "JiraClient":
         await self._ensure_session()
@@ -153,6 +172,76 @@ class JiraClient:
             elif result is not None:
                 valid_tasks.append(result)
         return valid_tasks
+
+    async def update_issue_status(self, issue_key: str, target_status: str) -> str:
+        """
+        Transition an issue to a new status by name or transition id.
+
+        Returns the transition id that was applied.
+        """
+        await self._ensure_session()
+        transitions_url = f"{self.config.base_url}/rest/api/3/issue/{issue_key}/transitions"
+
+        async with self.session.get(transitions_url) as resp:
+            if resp.status == 404:
+                raise RuntimeError(f"Issue {issue_key} not found")
+            resp.raise_for_status()
+            transitions_data = await resp.json()
+
+        transitions = transitions_data.get("transitions", [])
+        transition_id: Optional[str] = None
+
+        for transition in transitions:
+            if transition.get("id") == target_status:
+                transition_id = transition.get("id")
+                break
+            name = transition.get("name")
+            if name and name.lower() == target_status.lower():
+                transition_id = transition.get("id")
+                break
+
+        if not transition_id:
+            available = [t.get("name") for t in transitions]
+            raise ValueError(
+                f"Transition '{target_status}' not available for {issue_key}. "
+                f"Available transitions: {available}"
+            )
+
+        payload = {"transition": {"id": transition_id}}
+        async with self.session.post(transitions_url, json=payload) as resp:
+            resp.raise_for_status()
+
+        return transition_id
+
+    async def update_issue_description(self, issue_key: str, description: str) -> None:
+        """
+        Update an issue's description using a plain-text input.
+
+        Jira returns 204 on success; this method raises for non-success.
+        """
+        await self._ensure_session()
+        url = f"{self.config.base_url}/rest/api/3/issue/{issue_key}"
+        payload = {"fields": {"description": self._build_adf_doc(description)}}
+
+        async with self.session.put(url, json=payload) as resp:
+            if resp.status == 404:
+                raise RuntimeError(f"Issue {issue_key} not found")
+            resp.raise_for_status()
+
+    async def add_comment_to_issue(self, issue_key: str, comment: str) -> JiraComment:
+        """
+        Add a comment to an issue, returning the parsed JiraComment.
+        """
+        await self._ensure_session()
+        url = f"{self.config.base_url}/rest/api/3/issue/{issue_key}/comment"
+        payload = {"body": self._build_adf_doc(comment)}
+
+        async with self.session.post(url, json=payload) as resp:
+            if resp.status == 404:
+                raise RuntimeError(f"Issue {issue_key} not found")
+            resp.raise_for_status()
+            data = await resp.json()
+            return parse_jira_comment(data)
 
     async def download_attachments_for_task(
         self, task: JiraTask, base_dir: Path
