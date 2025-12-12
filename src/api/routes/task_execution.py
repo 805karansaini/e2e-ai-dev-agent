@@ -1,4 +1,4 @@
-"""Task endpoints."""
+"""Task orchestration and execution endpoints."""
 
 from __future__ import annotations
 
@@ -26,6 +26,14 @@ def _ensure_cli_available() -> None:
         )
 
 
+def _build_payload(body: TaskCreateRequest) -> TaskPayload:
+    return TaskPayload(
+        task_id=body.task_id,
+        repo_url=body.repo_url,
+        base_branch=body.base_branch,
+    )
+
+
 def _map_subtasks(subtasks: list) -> list[SubtaskPromptSchema]:
     return [
         SubtaskPromptSchema(
@@ -36,6 +44,31 @@ def _map_subtasks(subtasks: list) -> list[SubtaskPromptSchema]:
         )
         for sub in subtasks
     ]
+
+
+def _raise_unavailable(exc: RuntimeError) -> None:
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
+    ) from exc
+
+
+async def _orchestrate_or_error(payload: TaskPayload):
+    try:
+        return await task_orchestrator.orchestrate(payload)
+    except RuntimeError as exc:
+        _raise_unavailable(exc)
+
+
+async def _start_or_error(task_id: str):
+    try:
+        return await task_executor.start_from_store(task_id)
+    except RuntimeError as exc:
+        status_code = (
+            status.HTTP_404_NOT_FOUND
+            if "No stored prompts" in str(exc)
+            else status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
 
 
 @router.post(
@@ -49,18 +82,8 @@ async def orchestrate_task(body: TaskCreateRequest) -> Success[TaskPlanResponse]
 
     _ensure_cli_available()
 
-    payload = TaskPayload(
-        task_id=body.task_id,
-        repo_url=body.repo_url,
-        base_branch=body.base_branch,
-    )
-
-    try:
-        result = await task_orchestrator.orchestrate(payload)
-    except RuntimeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
-        ) from exc
+    payload = _build_payload(body)
+    result = await _orchestrate_or_error(payload)
 
     response = TaskPlanResponse(
         task_id=payload.task_id,
@@ -91,15 +114,7 @@ async def start_task(body: TaskCreateRequest) -> Success[TaskStartResponse]:
 
     _ensure_cli_available()
 
-    try:
-        started = await task_executor.start_from_store(body.task_id)
-    except RuntimeError as exc:
-        status_code = (
-            status.HTTP_404_NOT_FOUND
-            if "No stored prompts" in str(exc)
-            else status.HTTP_503_SERVICE_UNAVAILABLE
-        )
-        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+    started = await _start_or_error(body.task_id)
 
     response = TaskStartResponse(task_id=body.task_id, started_subtasks=started)
     return success(response, status_code=status.HTTP_202_ACCEPTED)
@@ -116,19 +131,10 @@ async def auto_dev_task(body: TaskCreateRequest) -> Success[TaskAutoResponse]:
 
     _ensure_cli_available()
 
-    payload = TaskPayload(
-        task_id=body.task_id,
-        repo_url=body.repo_url,
-        base_branch=body.base_branch,
-    )
+    payload = _build_payload(body)
 
-    try:
-        orchestration_result = await task_orchestrator.orchestrate(payload)
-        started = await task_executor.start_from_store(payload.task_id)
-    except RuntimeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
-        ) from exc
+    orchestration_result = await _orchestrate_or_error(payload)
+    started = await _start_or_error(payload.task_id)
 
     response = TaskAutoResponse(
         task_id=payload.task_id,
