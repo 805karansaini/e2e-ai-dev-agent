@@ -9,13 +9,17 @@ from fastapi import FastAPI
 from loguru import logger
 
 from src.api.middleware import install_logging_middleware
-from src.api.routes import health_router, tasks_router
+from src.api.routes import db_tasks_router, health_router, tasks_router
+from src.service.database_handler import create_tables
 from src.service.tasks import task_runner
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Start and stop shared services during the application lifespan."""
+
+    # Ensure database schema exists regardless of how the ASGI app is started.
+    create_tables()
 
     await task_runner.start()
     try:
@@ -37,6 +41,7 @@ def create_app() -> FastAPI:
     install_logging_middleware(app)
     app.include_router(health_router)
     app.include_router(tasks_router)
+    app.include_router(db_tasks_router)
 
     logger.info("FastAPI application created.")
     return app

@@ -1,5 +1,12 @@
 """Pydantic schemas exposed by the API package."""
 
+from src.api.schemas.db_tasks import (
+    TaskBase,
+    TaskList,
+    TaskResponse,
+    TaskSearchRequest,
+    TaskUpdate,
+)
 from src.api.schemas.envelopes import ErrorResponse, Success, success
 from src.api.schemas.health import LivenessStatus, ReadinessStatus
 from src.api.schemas.tasks import (
@@ -21,6 +28,11 @@ __all__ = [
     "TaskAccepted",
     "TaskAutoResponse",
     "TaskCreateRequest",
+    "TaskBase",
+    "TaskUpdate",
+    "TaskResponse",
+    "TaskList",
+    "TaskSearchRequest",
     "TaskPlanResponse",
     "TaskStartResponse",
 ]
