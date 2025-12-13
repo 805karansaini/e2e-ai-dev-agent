@@ -9,6 +9,7 @@ import aiohttp
 from pydantic import BaseModel, ConfigDict
 
 from src.core.config import settings
+from src.service.file_converter import file_converter
 
 from .models import JiraAttachment, JiraComment, JiraSubtask, JiraTask
 from .parsers import (
@@ -303,15 +304,29 @@ class JiraClient:
                 return fallback
             return Path(name).name or fallback
 
-        async def download_one(url: str, dest: Path) -> Optional[Path]:
+        async def download_one(url: str, dest: Path) -> List[Path]:
             async with self.session.get(url) as resp:
                 if resp.status != 200:
                     logger.warning("Failed to download %s: HTTP %s", url, resp.status)
-                    return None
+                    return []
                 data = await resp.read()
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 dest.write_bytes(data)
-                return dest
+
+                # Prefer markdown version for convertible files; avoid blocking event loop
+                if file_converter.should_convert(dest):
+                    md_path = await asyncio.to_thread(
+                        file_converter.convert_and_save, dest, dest.parent
+                    )
+                    if md_path:
+                        try:
+                            dest.unlink()
+                        except Exception:  # best-effort cleanup
+                            logger.debug("Could not remove original attachment %s", dest)
+                        logger.info("Converted %s to markdown: %s", dest, md_path)
+                        return [md_path]
+
+                return [dest]
 
         issue_dir = base_dir / task.key
 
@@ -320,12 +335,17 @@ class JiraClient:
                 continue
             filename = safe_filename(attachment.filename, attachment.id or "attachment")
             dest = issue_dir / filename
+            md_dest = dest.parent / (dest.stem + ".md")
+
+            # Prefer existing markdown copy; fall back to original only if needed
+            if md_dest.exists():
+                saved_paths.append(md_dest)
+                continue
             if dest.exists():
                 saved_paths.append(dest)
                 continue
-            saved = await download_one(attachment.content, dest)
-            if saved:
-                saved_paths.append(saved)
+            downloaded_paths = await download_one(attachment.content, dest)
+            saved_paths.extend(downloaded_paths)
 
         for subtask in task.subtasks:
             if not subtask.attachments:
@@ -338,12 +358,16 @@ class JiraClient:
                     attachment.filename, attachment.id or "attachment"
                 )
                 dest = subtask_dir / filename
+                md_dest = dest.parent / (dest.stem + ".md")
+
+                if md_dest.exists():
+                    saved_paths.append(md_dest)
+                    continue
                 if dest.exists():
                     saved_paths.append(dest)
                     continue
-                saved = await download_one(attachment.content, dest)
-                if saved:
-                    saved_paths.append(saved)
+                downloaded_paths = await download_one(attachment.content, dest)
+                saved_paths.extend(downloaded_paths)
 
         return saved_paths
 
