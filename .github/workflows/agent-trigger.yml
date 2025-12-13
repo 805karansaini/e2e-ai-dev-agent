@@ -16,7 +16,7 @@ jobs:
           github.event_name == 'pull_request' ||
           contains(github.event.comment.body, '@my-agent')
         run: |
-          curl -X POST https://webhook.com \
+          curl -X POST https://webhook.site/641dc95d-c157-4041-ba96-b045f1f4f118 \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ABC" \
             -d '{
