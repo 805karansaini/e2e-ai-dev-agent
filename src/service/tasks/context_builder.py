@@ -87,16 +87,13 @@ class JiraContextBuilder:
         ).strip()
 
     def _build_subtask_prompts(self, task: JiraTask) -> list[SubtaskPrompt]:
+        # Important: when Jira has no subtasks, we do NOT synthesize a "subtask"
+        # prompt with the same key as the parent task. That would get persisted
+        # as a SUBTASK row and duplicate the parent in the DB. Execution paths
+        # that need a fallback prompt (runner/executor/orchestrator) already
+        # handle the "no subtasks" case.
         if not task.subtasks:
-            prompt = self._compose_subtask_prompt(task, None)
-            return [
-                SubtaskPrompt(
-                    key=task.key,
-                    summary=task.summary,
-                    description=task.description,
-                    prompt=prompt,
-                )
-            ]
+            return []
 
         prompts: list[SubtaskPrompt] = []
         for subtask in task.subtasks:

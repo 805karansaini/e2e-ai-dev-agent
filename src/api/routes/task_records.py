@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -19,16 +20,21 @@ from src.api.schemas import (
     success,
 )
 from src.api.services import (
+    JiraImportServiceError,
+    JiraIssueNotFoundError,
     TaskConflictError,
     TaskNotFoundError,
     TaskService,
     TaskServiceError,
 )
+from src.api.services import (
+    import_task_from_jira as import_task_from_jira_service,
+)
 from src.service.database_handler.config import get_db_session
 from src.service.database_handler.models.task import TaskStatus, TaskType
-from src.service.jira import JiraClient, JiraConfig
 
 router = APIRouter(prefix="/db/tasks", tags=["database-tasks"])
+logger = logging.getLogger(__name__)
 
 
 def get_db() -> Session:
@@ -241,76 +247,26 @@ async def import_task_from_jira(
 ) -> Success[TaskResponse]:
     """Import a task from Jira and insert it into the database."""
     try:
-        # Initialize Jira client
-        jira_config = JiraConfig.from_env()
-        async with JiraClient(jira_config) as jira_client:
-            # Fetch task from Jira
-            jira_task = await jira_client.fetch_issue_with_subtasks(request.jira_task_id)
-            if not jira_task:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Jira task '{request.jira_task_id}' not found.",
-                )
-
-            # Convert JiraTask to CreateTask
-            create_task_data = CreateTask(
-                task_id=jira_task.key,
-                summary=jira_task.summary,
-                description=jira_task.description,
-                repo_url=request.repo_url,
-                base_branch=request.branch,
-                status=TaskStatus.PENDING.value,
-                additional_json={
-                    "jira_id": jira_task.id,
-                    "jira_status": jira_task.status.model_dump() if jira_task.status else None,
-                    "jira_assignee": jira_task.assignee.model_dump() if jira_task.assignee else None,
-                    "jira_reporter": jira_task.reporter.model_dump() if jira_task.reporter else None,
-                    "jira_priority": jira_task.priority.model_dump() if jira_task.priority else None,
-                    "jira_labels": jira_task.labels,
-                    "jira_created": jira_task.created.isoformat() if jira_task.created else None,
-                    "jira_updated": jira_task.updated.isoformat() if jira_task.updated else None,
-                },
-            )
-
-            # Create task in database
-            try:
-                task = service.create_task(create_task_data)
-            except TaskServiceError as exc:
-                _raise_http_error(exc)
-
-            # Create all subtasks
-            for subtask in jira_task.subtasks:
-                create_subtask_data = CreateSubTask(
-                    task_id=jira_task.key,  # Parent task ID
-                    sub_task_id=subtask.key,  # Subtask key
-                    summary=subtask.summary,
-                    description=subtask.description,
-                    repo_url=request.repo_url,
-                    base_branch=request.branch,
-                    status=TaskStatus.PENDING.value,
-                    additional_json={
-                        "jira_id": subtask.id,
-                        "jira_status": subtask.status.model_dump() if subtask.status else None,
-                        "jira_assignee": subtask.assignee.model_dump() if subtask.assignee else None,
-                        "jira_reporter": subtask.reporter.model_dump() if subtask.reporter else None,
-                        "jira_priority": subtask.priority.model_dump() if subtask.priority else None,
-                        "jira_labels": subtask.labels,
-                        "jira_created": subtask.created.isoformat() if subtask.created else None,
-                        "jira_updated": subtask.updated.isoformat() if subtask.updated else None,
-                    },
-                )
-                try:
-                    service.create_sub_task(create_subtask_data)
-                except TaskServiceError as exc:
-                    # Log the error but continue with other subtasks
-                    # We'll still return the main task even if some subtasks fail
-                    print(f"Failed to create subtask {subtask.key}: {exc}")
-
-            return success(
-                TaskResponse.model_validate(task), status_code=status.HTTP_201_CREATED
-            )
+        result = await import_task_from_jira_service(request, task_service=service)
+        return success(
+            TaskResponse.model_validate(result.task),
+            status_code=(
+                status.HTTP_200_OK if result.existed_before else status.HTTP_201_CREATED
+            ),
+        )
     except HTTPException:
         raise
+    except JiraIssueNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from exc
+    except TaskServiceError as exc:
+        _raise_http_error(exc)
+    except JiraImportServiceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to import task from Jira: {str(exc)}",
+        ) from exc
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

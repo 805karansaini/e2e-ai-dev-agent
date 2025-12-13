@@ -1,4 +1,5 @@
 from .client import JiraClient, JiraConfig
+from .import_utils import jira_metadata, split_downloaded_attachment_paths
 from .models import (
     JiraAttachment,
     JiraComment,
@@ -39,6 +40,8 @@ __all__ = [
     "JiraUser",
     "JiraContext",
     "SubtaskPrompt",
+    "jira_metadata",
+    "split_downloaded_attachment_paths",
     "extract_rich_text",
     "parse_jira_attachment",
     "parse_jira_comment",

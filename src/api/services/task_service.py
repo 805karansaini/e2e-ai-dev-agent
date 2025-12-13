@@ -187,7 +187,27 @@ class TaskService:
     # ---- Helpers ----------------------------------------------------------------
     @staticmethod
     def _attachment_path(attachments: Optional[Iterable]) -> Optional[list[dict]]:
-        """Convert attachment pydantic models to a JSON-serializable list."""
+        """Convert attachment objects to a JSON-serializable list.
+
+        Accepts either pydantic AttachmentPath models (with .filename/.path)
+        or plain dicts {"filename": ..., "path": ...}. This is important for
+        update payloads where pydantic may dump nested models to dicts.
+        """
         if not attachments:
             return None
-        return [{"filename": ap.filename, "path": ap.path} for ap in attachments]
+        normalized: list[dict] = []
+        for ap in attachments:
+            if ap is None:
+                continue
+            if isinstance(ap, dict):
+                filename = ap.get("filename")
+                path = ap.get("path")
+            else:
+                filename = getattr(ap, "filename", None)
+                path = getattr(ap, "path", None)
+
+            if not filename or not path:
+                continue
+            normalized.append({"filename": filename, "path": path})
+
+        return normalized or None

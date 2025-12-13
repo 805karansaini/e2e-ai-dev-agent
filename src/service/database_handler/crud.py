@@ -58,8 +58,18 @@ class TaskCRUD:
 
     @staticmethod
     def get_task_by_task_id(db: Session, task_id: str) -> Optional[Task]:
-        """Get task by task_id field."""
-        return db.query(Task).filter(Task.task_id == task_id).first()
+        """Get a top-level (parent) task by task_id.
+
+        Note: Subtasks share the same task_id, so callers expecting the parent
+        must filter on task_type + sub_task_id.
+        """
+        return (
+            db.query(Task)
+            .filter(Task.task_id == task_id)
+            .filter(Task.task_type == TaskType.TASK)
+            .filter(Task.sub_task_id.is_(None))
+            .first()
+        )
 
     @staticmethod
     def get_tasks_by_status(db: Session, status: TaskStatus) -> List[Task]:
