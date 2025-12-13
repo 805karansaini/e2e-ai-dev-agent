@@ -29,6 +29,19 @@ task_orchestrator = TaskOrchestrator(
 )
 task_executor = TaskExecutor(executor=_cli_executor, persistence=_persistence)
 
+
+async def build_and_persist_context(payload: TaskPayload):
+    """Build Jira context for a payload and persist it to the task store.
+
+    This is the shared "build context -> persist" flow used by the runner,
+    exposed as a lightweight helper for API routes and internal callers.
+    """
+
+    context = await _context_builder.build(payload)
+    await _persistence.persist(context, payload)
+    return context
+
+
 __all__ = [
     "TaskPayload",
     "TaskRunner",
@@ -37,4 +50,5 @@ __all__ = [
     "task_orchestrator",
     "TaskExecutor",
     "task_executor",
+    "build_and_persist_context",
 ]

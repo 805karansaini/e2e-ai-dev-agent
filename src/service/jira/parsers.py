@@ -209,6 +209,38 @@ def parse_jira_subtask(subtask_data: Dict[str, Any]) -> JiraSubtask:
     )
 
 
+def parse_jira_subtask_issue(issue_data: Dict[str, Any]) -> JiraSubtask:
+    """Parse a full subtask *issue* payload into JiraSubtask.
+
+    Jira's parent issue payload often includes subtasks without description.
+    Fetching each subtask as its own issue provides full fields; this parser
+    converts that issue response into the JiraSubtask model used elsewhere.
+    """
+
+    fields = issue_data.get("fields", {})
+
+    return JiraSubtask(
+        id=issue_data.get("id", ""),
+        key=issue_data.get("key", ""),
+        fields=fields,
+        summary=fields.get("summary"),
+        description=extract_rich_text(fields.get("description")),
+        status=parse_jira_status(fields.get("status")),
+        assignee=parse_jira_user(fields.get("assignee")),
+        reporter=parse_jira_user(fields.get("reporter")),
+        priority=parse_jira_priority(fields.get("priority")),
+        issue_type=parse_jira_issue_type(fields.get("issuetype")),
+        created=parse_jira_datetime(fields.get("created")),
+        updated=parse_jira_datetime(fields.get("updated")),
+        labels=fields.get("labels", []),
+        components=fields.get("components", []),
+        comments=[
+            parse_jira_comment(c) for c in fields.get("comment", {}).get("comments", [])
+        ],
+        attachments=[parse_jira_attachment(a) for a in fields.get("attachment", [])],
+    )
+
+
 def parse_jira_task(issue_data: Dict[str, Any]) -> JiraTask:
     """Parse Jira issue data into JiraTask model."""
     fields = issue_data.get("fields", {})
@@ -247,6 +279,7 @@ __all__ = [
     "parse_jira_project",
     "parse_jira_status",
     "parse_jira_subtask",
+    "parse_jira_subtask_issue",
     "parse_jira_task",
     "parse_jira_user",
 ]

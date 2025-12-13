@@ -13,6 +13,7 @@ from .models import JiraAttachment, JiraComment, JiraSubtask, JiraTask
 from .parsers import (
     parse_jira_attachment,
     parse_jira_comment,
+    parse_jira_subtask_issue,
     parse_jira_task,
 )
 
@@ -94,6 +95,22 @@ class JiraClient:
             connector=connector,
         )
 
+    async def _fetch_issue_json(self, issue_key: str) -> Optional[Dict[str, Any]]:
+        await self._ensure_session()
+        url = f"{self.config.base_url}/rest/api/3/issue/{issue_key}"
+        params = {
+            "fields": "*all",
+            "expand": "renderedFields",
+        }
+
+        async with self.session.get(url, params=params) as resp:
+            if resp.status == 404:
+                return None
+            if resp.status != 200:
+                text = await resp.text()
+                raise RuntimeError(f"Error fetching {issue_key}: {resp.status} {text}")
+            return await resp.json()
+
     async def fetch_issues(
         self,
         jql: str,
@@ -140,21 +157,35 @@ class JiraClient:
 
     async def fetch_issue_with_subtasks(self, issue_key: str) -> Optional[JiraTask]:
         """Fetch a specific issue and all its subtasks."""
-        await self._ensure_session()
-        url = f"{self.config.base_url}/rest/api/3/issue/{issue_key}"
-        params = {
-            "fields": "*all",
-            "expand": "renderedFields",
-        }
+        issue_data = await self._fetch_issue_json(issue_key)
+        if issue_data is None:
+            return None
 
-        async with self.session.get(url, params=params) as resp:
-            if resp.status == 404:
-                return None
-            if resp.status != 200:
-                text = await resp.text()
-                raise RuntimeError(f"Error fetching {issue_key}: {resp.status} {text}")
-            issue_data = await resp.json()
-            return parse_jira_task(issue_data)
+        task = parse_jira_task(issue_data)
+
+        # Jira's parent issue payload frequently contains subtasks without full fields
+        # (notably description). Fetch each subtask as its own issue to hydrate details.
+        if not task.subtasks:
+            return task
+
+        original_by_key = {st.key: st for st in task.subtasks if st.key}
+        subtask_keys = [st.key for st in task.subtasks if st.key]
+
+        results = await asyncio.gather(
+            *(self._fetch_issue_json(key) for key in subtask_keys),
+            return_exceptions=True,
+        )
+
+        hydrated: list[JiraSubtask] = []
+        for key, result in zip(subtask_keys, results):
+            if isinstance(result, Exception) or result is None:
+                # Keep whatever we had from the parent payload if we can't hydrate.
+                hydrated.append(original_by_key.get(key) or JiraSubtask(id="", key=key))
+                continue
+            hydrated.append(parse_jira_subtask_issue(result))
+
+        task.subtasks = hydrated
+        return task
 
     async def fetch_multiple_issues_with_subtasks(
         self, issue_keys: List[str]
@@ -180,7 +211,9 @@ class JiraClient:
         Returns the transition id that was applied.
         """
         await self._ensure_session()
-        transitions_url = f"{self.config.base_url}/rest/api/3/issue/{issue_key}/transitions"
+        transitions_url = (
+            f"{self.config.base_url}/rest/api/3/issue/{issue_key}/transitions"
+        )
 
         async with self.session.get(transitions_url) as resp:
             if resp.status == 404:
