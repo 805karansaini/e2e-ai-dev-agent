@@ -67,8 +67,14 @@ class TaskAutoResponse(BaseModel):
     """Combined orchestration + execution acknowledgement."""
 
     task_id: str
-    orchestration_prompt: str
+    orchestration_prompt: str = Field(
+        default="",
+        description=(
+            "Orchestration prompt (if returned). For /tasks/auto this may be empty "
+            "because orchestration runs asynchronously; fetch from the DB endpoints instead."
+        ),
+    )
     started_subtasks: list[str] = Field(
         default_factory=list, description="Identifiers for the started subtasks"
     )
-    message: str = "orchestration and execution started"
+    message: str = "orchestration and execution queued"

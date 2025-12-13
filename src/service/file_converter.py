@@ -10,7 +10,7 @@ class FileConverter:
     """Convert various file formats to markdown using Markitdown."""
 
     # File extensions that should be converted to markdown
-    CONVERTIBLE_EXTENSIONS = {'.pdf', '.docx', '.pptx'}
+    CONVERTIBLE_EXTENSIONS = {".pdf", ".docx", ".pptx"}
 
     def should_convert(self, file_path: Path) -> bool:
         """Check if a file should be converted to markdown."""
@@ -32,6 +32,7 @@ class FileConverter:
         except Exception as e:
             # Log the error but don't fail the entire import
             import logging
+
             logger = logging.getLogger(__name__)
             logger.warning(f"Failed to convert {file_path} to markdown: {e}")
             return None
@@ -54,14 +55,15 @@ class FileConverter:
             return None
 
         # Create markdown filename by replacing extension with .md
-        md_filename = source_path.stem + '.md'
+        md_filename = source_path.stem + ".md"
         md_path = target_dir / md_filename
 
         try:
-            md_path.write_text(markdown_content, encoding='utf-8')
+            md_path.write_text(markdown_content, encoding="utf-8")
             return md_path
         except Exception as e:
             import logging
+
             logger = logging.getLogger(__name__)
             logger.warning(f"Failed to save converted markdown for {source_path}: {e}")
             return None

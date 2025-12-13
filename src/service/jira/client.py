@@ -322,7 +322,9 @@ class JiraClient:
                         try:
                             dest.unlink()
                         except Exception:  # best-effort cleanup
-                            logger.debug("Could not remove original attachment %s", dest)
+                            logger.debug(
+                                "Could not remove original attachment %s", dest
+                            )
                         logger.info("Converted %s to markdown: %s", dest, md_path)
                         return [md_path]
 
