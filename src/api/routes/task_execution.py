@@ -90,13 +90,6 @@ async def orchestrate_task(body: TaskCreateRequest) -> Success[TaskPlanResponse]
     return success(response, status_code=status.HTTP_202_ACCEPTED)
 
 
-@router.post("/tasks", include_in_schema=False)
-async def orchestrate_task_legacy(body: TaskCreateRequest) -> Success[TaskPlanResponse]:
-    """Backward-compatible entrypoint that maps to Task Orchestrator."""
-
-    return await orchestrate_task(body)
-
-
 @router.post(
     "/tasks/start",
     response_model=Success[TaskStartResponse],
