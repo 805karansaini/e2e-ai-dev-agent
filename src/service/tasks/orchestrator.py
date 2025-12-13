@@ -186,8 +186,8 @@ class TaskOrchestrator:
                     "=== CRITICAL REQUIREMENTS ===\n"
                     "1. EXACT ID MATCHING: Use only the work item IDs listed below. Never invent or modify IDs.\n"
                     "2. IMPLEMENTATION FOCUS: Prompts should specify WHAT needs to be done, not HOW to do it.\n"
-                    "4. NO ASSUMPTIONS: Don't add dependencies, tools, or services not mentioned in the context.\n"
-                    "5. CLARITY OVER LENGTH: Shorter, clearer prompts are better than verbose ones.\n\n"
+                    "3. NO ASSUMPTIONS: Don't add dependencies, tools, or services not mentioned in the context.\n"
+                    "4. CLARITY OVER LENGTH: Shorter, clearer prompts are better than verbose ones.\n\n"
                     "=== WORK ITEMS (use these IDs exactly) ===\n"
                     + "\n".join(work_items_lines)
                     + "\n\n"

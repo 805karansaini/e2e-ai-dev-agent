@@ -176,7 +176,7 @@ class ClineExecutor:
             await self._emit_output(payload, stream_name, buffer)
             await self._maybe_parse_json(buffer, on_json)
 
-    async def execute(self, prompt: str, payload: TaskPayload) -> None:
+    async def execute(self, prompt: str, payload: TaskPayload) -> str | None:
         if not self.cli_available:
             raise RuntimeError(
                 f"CLINE CLI binary '{self.cli_bin}' not found in PATH; cannot start task."
@@ -299,7 +299,7 @@ class ClineExecutor:
                     task_id=payload.task_id,
                     summary=summary,
                 )
-                return
+                return str(summary)
 
             raise RuntimeError(
                 f"CLINE CLI exited with status {returncode} "
@@ -315,6 +315,7 @@ class ClineExecutor:
                 task_id=payload.task_id,
                 summary=summary,
             )
+        return str(summary) if summary else None
 
 
 __all__ = ["ClineExecutor"]
