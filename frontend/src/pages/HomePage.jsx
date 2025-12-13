@@ -71,13 +71,48 @@ function groupTasks(tasks) {
   })
 }
 
-function TaskRow({ task, isSubtask = false, onEdit, onAddSubtask }) {
+// Icon components
+function PlusIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      aria-hidden="true"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+    </svg>
+  )
+}
+
+function EditIcon({ className }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeWidth={2}
+      aria-hidden="true"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
+      />
+    </svg>
+  )
+}
+
+function TaskRow({ task, isSubtask = false, onEdit, onAddSubtask, onPlan, onAuto, onDevelopment }) {
   const statusStyles = getStatusStyles(task.status)
   const typeLabel = getTaskTypeLabel(task.task_type, isSubtask)
 
   return (
     <div
-      className={`grid grid-cols-[minmax(80px,0.15fr)_minmax(0,2.2fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,0.7fr)_minmax(0,0.9fr)] items-center gap-4 border-t border-slate-100 bg-white px-5 py-4 text-sm last:border-b sm:px-7 dark:border-slate-800 dark:bg-slate-900/70 my-1 ${isSubtask ? 'pl-6 sm:pl-10' : ''}`}
+      className={`grid grid-cols-[minmax(80px,0.15fr)_minmax(0,2.2fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,0.7fr)_minmax(0,0.9fr)] items-center gap-4 border-t border-slate-100 bg-white px-5 py-4 text-sm last:border-b sm:px-7 dark:border-slate-800 dark:bg-slate-900/70 ${isSubtask ? 'pl-6 sm:pl-10' : ''}`}
     >
       {/* Task ID */}
       <div className="flex items-center gap-2 text-xs font-mono font-semibold tracking-tight text-slate-900 dark:text-slate-100 sm:text-sm min-w-0 overflow-hidden">
@@ -92,7 +127,7 @@ function TaskRow({ task, isSubtask = false, onEdit, onAddSubtask }) {
       </div>
 
       {/* Description + helper text */}
-      <div className="space-y-1 my-1 ml-4 min-w-0">
+      <div className="space-y-1 min-w-0">
         <p className="truncate text-sm font-medium text-slate-900 dark:text-slate-50">
           {task.description || 'Untitled task'}
         </p>
@@ -102,19 +137,19 @@ function TaskRow({ task, isSubtask = false, onEdit, onAddSubtask }) {
       </div>
 
       {/* Status */}
-      <div className="flex justify-start my-1">
+      <div className="flex justify-start">
         <span className={statusStyles.className}>{statusStyles.label}</span>
       </div>
 
       {/* Type */}
-      <div className="my-1">
+      <div>
         <span className="inline-flex items-center rounded-full bg-slate-50 px-3 py-1 text-xs font-medium capitalize text-slate-700 ring-1 ring-inset ring-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700">
           {typeLabel.toLowerCase()}
         </span>
       </div>
 
       {/* Branch */}
-      <div className="text-xs font-medium text-slate-700 dark:text-slate-300 my-1">
+      <div className="text-xs font-medium text-slate-700 dark:text-slate-300">
         {task.base_branch || '–'}
       </div>
 
@@ -124,26 +159,43 @@ function TaskRow({ task, isSubtask = false, onEdit, onAddSubtask }) {
           <button
             type="button"
             onClick={() => onAddSubtask?.(task)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-xs text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-600 transition-colors hover:bg-slate-100 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:border-slate-600"
             title="Add sub-task"
           >
-            +
+            <PlusIcon className="h-4 w-4" />
           </button>
         )}
         <button
           type="button"
           onClick={() => onEdit?.(task, isSubtask)}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-xs text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-slate-600 transition-colors hover:bg-slate-100 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:border-slate-600"
           title="Edit"
         >
-          ✎
+          <EditIcon className="h-4 w-4" />
         </button>
         <button
           type="button"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-slate-50 text-[11px] text-slate-700 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
-          title="Plan"
+          onClick={() => onPlan?.(task, isSubtask)}
+          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-slate-50 px-2.5 text-[11px] font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:border-slate-600"
+          title="Plan - Generate and edit prompts"
         >
           Plan
+        </button>
+        <button
+          type="button"
+          onClick={() => onAuto?.(task, isSubtask)}
+          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-slate-50 px-2.5 text-[11px] font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:border-slate-600"
+          title="Auto - Generate prompts and start development"
+        >
+          Auto
+        </button>
+        <button
+          type="button"
+          onClick={() => onDevelopment?.(task, isSubtask)}
+          className="inline-flex h-8 items-center justify-center rounded-md border border-slate-200 bg-slate-50 px-2.5 text-[11px] font-medium text-slate-700 transition-colors hover:bg-slate-100 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:border-slate-600"
+          title="Development - Start development directly"
+        >
+          Dev
         </button>
       </div>
     </div>
@@ -487,6 +539,155 @@ function CreateTaskModal({ open, onClose, isSubtask, parentTask, onCreate }) {
   )
 }
 
+function PlanModal({ open, onClose, task, planData, onSave }) {
+  const [orchestrationPrompt, setOrchestrationPrompt] = useState('')
+  const [simplePrompt, setSimplePrompt] = useState('')
+  const [subtaskPrompts, setSubtaskPrompts] = useState([])
+  const [isSaving, setIsSaving] = useState(false)
+
+  useEffect(() => {
+    if (!open || !planData) return
+
+    setOrchestrationPrompt(planData.orchestration_prompt || '')
+    setSimplePrompt(planData.simple_prompt || '')
+    setSubtaskPrompts(planData.subtask_prompts || [])
+  }, [open, planData])
+
+  if (!open || !task || !planData) {
+    return null
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+
+    try {
+      setIsSaving(true)
+      await onSave({
+        task,
+        planData: {
+          ...planData,
+          orchestration_prompt: orchestrationPrompt,
+          simple_prompt: simplePrompt,
+          subtask_prompts: subtaskPrompts,
+        },
+      })
+      onClose()
+    } catch {
+      // Errors are surfaced via toast in the caller
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  function handleSubtaskPromptChange(index, field, value) {
+    const updated = [...subtaskPrompts]
+    updated[index] = { ...updated[index], [field]: value }
+    setSubtaskPrompts(updated)
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 px-4 py-8"
+      aria-modal="true"
+      role="dialog"
+    >
+      <div
+        className="relative w-full max-w-4xl rounded-2xl bg-white shadow-xl transition-colors dark:border dark:border-slate-800 dark:bg-slate-900 max-h-[90vh] overflow-hidden flex flex-col"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4 transition-colors sm:px-6 dark:border-slate-800">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900 dark:text-white sm:text-lg">
+              Task Plan - Generated Prompts
+            </h3>
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-300 sm:text-sm">
+              Review and edit the generated prompts for task: <span className="font-mono">{task.task_id}</span>
+            </p>
+          </div>
+
+          <div className="h-8 w-8" />
+        </div>
+
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-5 py-4 sm:px-6 sm:py-5 space-y-4">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-slate-900 dark:text-slate-100">Orchestration Prompt</span>
+            <textarea
+              value={orchestrationPrompt}
+              onChange={(event) => setOrchestrationPrompt(event.target.value)}
+              className="min-h-[120px] w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-500"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-slate-900 dark:text-slate-100">Simple Prompt</span>
+            <textarea
+              value={simplePrompt}
+              onChange={(event) => setSimplePrompt(event.target.value)}
+              className="min-h-[120px] w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-500"
+            />
+          </label>
+
+          {subtaskPrompts.length > 0 && (
+            <div className="space-y-4">
+              <h4 className="text-sm font-semibold text-slate-900 dark:text-white">
+                Subtask Prompts ({subtaskPrompts.length})
+              </h4>
+              {subtaskPrompts.map((subtask, index) => (
+                <div key={index} className="rounded-lg border border-slate-200 p-4 dark:border-slate-700">
+                  <div className="mb-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                        Subtask Key:
+                      </span>
+                      <span className="text-xs font-mono text-slate-900 dark:text-slate-100">
+                        {subtask.subtask_key || `Subtask ${index + 1}`}
+                      </span>
+                    </div>
+                    {subtask.summary && (
+                      <div>
+                        <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Summary: </span>
+                        <span className="text-xs text-slate-600 dark:text-slate-400">{subtask.summary}</span>
+                      </div>
+                    )}
+                    {subtask.description && (
+                      <div>
+                        <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Description: </span>
+                        <span className="text-xs text-slate-600 dark:text-slate-400">{subtask.description}</span>
+                      </div>
+                    )}
+                  </div>
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium text-slate-900 dark:text-slate-100">Prompt</span>
+                    <textarea
+                      value={subtask.prompt || ''}
+                      onChange={(event) => handleSubtaskPromptChange(index, 'prompt', event.target.value)}
+                      className="min-h-[100px] w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-primary-soft focus:outline-none focus:ring-2 focus:ring-primary/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-500"
+                    />
+                  </label>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-200 dark:border-slate-800">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSaving}
+              className="btn-ghost min-w-[96px]"
+            >
+              Cancel
+            </button>
+            <button type="submit" disabled={isSaving} className="btn-primary min-w-[130px]">
+              {isSaving ? 'Saving…' : 'Save & Start Development'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 function EditTaskModal({ open, onClose, task, isSubtask, onSave }) {
   const [status, setStatus] = useState('PENDING')
   const [description, setDescription] = useState('')
@@ -672,6 +873,11 @@ function HomePage() {
   const [isLoading, setIsLoading] = useState(false)
   const [expanded, setExpanded] = useState(() => new Set())
   const [editing, setEditing] = useState(null)
+  const [planModal, setPlanModal] = useState({
+    open: false,
+    task: null,
+    planData: null,
+  })
   const [importModal, setImportModal] = useState({
     open: false,
   })
@@ -827,6 +1033,121 @@ function HomePage() {
     }
   }
 
+  async function handlePlan(task, isSubtask = false) {
+    const taskId = isSubtask ? task.sub_task_id : task.task_id
+    if (!taskId || !task.repo_url) {
+      toast.error('Task ID and Repository URL are required for planning.')
+      return
+    }
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/tasks/orchestrator`, {
+        task_id: taskId,
+        repo_url: task.repo_url,
+        base_branch: task.base_branch || 'main',
+      })
+
+      const planData = response?.data?.data
+      if (!planData) {
+        throw new Error('No plan data returned from API.')
+      }
+
+      setPlanModal({
+        open: true,
+        task: { ...task, task_id: taskId },
+        planData,
+      })
+      toast.success('Task plan generated successfully.')
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Error generating plan:', error)
+
+      const message = buildErrorMessage(error, 'Failed to generate task plan.')
+      toast.error(message)
+    }
+  }
+
+  function handleClosePlan() {
+    setPlanModal({ open: false, task: null, planData: null })
+  }
+
+  async function handleSavePlan({ task, planData }) {
+    // For now, we'll just start development with the saved prompts
+    // In the future, you might want to save the edited prompts to the database
+    try {
+      const isSubtask = !!task.sub_task_id && !task.task_id
+      await handleDevelopment(task, isSubtask)
+      toast.success('Plan saved and development started.')
+    } catch (error) {
+      // Error already handled in handleDevelopment
+      throw error
+    }
+  }
+
+  async function handleAuto(task, isSubtask = false) {
+    const taskId = isSubtask ? task.sub_task_id : task.task_id
+    if (!taskId || !task.repo_url) {
+      toast.error('Task ID and Repository URL are required for auto mode.')
+      return
+    }
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/tasks/auto`, {
+        task_id: taskId,
+        repo_url: task.repo_url,
+        base_branch: task.base_branch || 'main',
+      })
+
+      const result = response?.data?.data
+      if (!result) {
+        throw new Error('No response data returned from API.')
+      }
+
+      toast.success(
+        `Auto mode started. ${result.started_subtasks?.length || 0} subtask(s) queued for execution.`
+      )
+      await loadTasks()
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Error starting auto mode:', error)
+
+      const message = buildErrorMessage(error, 'Failed to start auto mode.')
+      toast.error(message)
+    }
+  }
+
+  async function handleDevelopment(task, isSubtask = false) {
+    const taskId = isSubtask ? task.sub_task_id : task.task_id
+    if (!taskId || !task.repo_url) {
+      toast.error('Task ID and Repository URL are required for development mode.')
+      return
+    }
+
+    try {
+      const response = await axios.post(`${API_BASE_URL}/tasks/start`, {
+        task_id: taskId,
+        repo_url: task.repo_url,
+        base_branch: task.base_branch || 'main',
+      })
+
+      const result = response?.data?.data
+      if (!result) {
+        throw new Error('No response data returned from API.')
+      }
+
+      toast.success(
+        `Development started. ${result.started_subtasks?.length || 0} subtask(s) queued for execution.`
+      )
+      await loadTasks()
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Error starting development:', error)
+
+      const message = buildErrorMessage(error, 'Failed to start development. Make sure prompts are generated first.')
+      toast.error(message)
+    }
+  }
+
   return (
     <section className="space-y-6">
       <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
@@ -860,7 +1181,7 @@ function HomePage() {
             <div className="w-[68px] shrink-0" aria-hidden="true" />
             <div className="grid flex-1 grid-cols-[minmax(80px,0.15fr)_minmax(0,2.2fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,0.7fr)_minmax(0,0.9fr)] items-center gap-4">
               <span className="whitespace-nowrap">Task ID</span>
-              <span className="ml-4">Description</span>
+              <span>Description</span>
               <span>Status</span>
               <span>Type</span>
               <span>Branch</span>
@@ -916,6 +1237,9 @@ function HomePage() {
                           isSubtask={false}
                           onEdit={handleEditClick}
                           onAddSubtask={handleOpenCreateSubtask}
+                          onPlan={handlePlan}
+                          onAuto={handleAuto}
+                          onDevelopment={handleDevelopment}
                         />
                       </div>
                     </div>
@@ -927,6 +1251,9 @@ function HomePage() {
                           task={subtask}
                           isSubtask
                           onEdit={handleEditClick}
+                          onPlan={handlePlan}
+                          onAuto={handleAuto}
+                          onDevelopment={handleDevelopment}
                         />
                       ))}
                   </div>
@@ -956,6 +1283,14 @@ function HomePage() {
         task={editing?.task || null}
         isSubtask={editing?.isSubtask ?? false}
         onSave={handleSaveEdit}
+      />
+
+      <PlanModal
+        open={planModal.open}
+        onClose={handleClosePlan}
+        task={planModal.task}
+        planData={planModal.planData}
+        onSave={handleSavePlan}
       />
     </section>
   )
