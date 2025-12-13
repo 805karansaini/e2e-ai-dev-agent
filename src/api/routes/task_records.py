@@ -278,6 +278,34 @@ async def import_task_from_jira(
             except TaskServiceError as exc:
                 _raise_http_error(exc)
 
+            # Create all subtasks
+            for subtask in jira_task.subtasks:
+                create_subtask_data = CreateSubTask(
+                    task_id=jira_task.key,  # Parent task ID
+                    sub_task_id=subtask.key,  # Subtask key
+                    summary=subtask.summary,
+                    description=subtask.description,
+                    repo_url=request.repo_url,
+                    base_branch=request.branch,
+                    status=TaskStatus.PENDING.value,
+                    additional_json={
+                        "jira_id": subtask.id,
+                        "jira_status": subtask.status.model_dump() if subtask.status else None,
+                        "jira_assignee": subtask.assignee.model_dump() if subtask.assignee else None,
+                        "jira_reporter": subtask.reporter.model_dump() if subtask.reporter else None,
+                        "jira_priority": subtask.priority.model_dump() if subtask.priority else None,
+                        "jira_labels": subtask.labels,
+                        "jira_created": subtask.created.isoformat() if subtask.created else None,
+                        "jira_updated": subtask.updated.isoformat() if subtask.updated else None,
+                    },
+                )
+                try:
+                    service.create_sub_task(create_subtask_data)
+                except TaskServiceError as exc:
+                    # Log the error but continue with other subtasks
+                    # We'll still return the main task even if some subtasks fail
+                    print(f"Failed to create subtask {subtask.key}: {exc}")
+
             return success(
                 TaskResponse.model_validate(task), status_code=status.HTTP_201_CREATED
             )
