@@ -80,5 +80,21 @@ def setup_logging() -> None:
 
     logging.getLogger("uvicorn.access").addFilter(SuppressHealthCheckAccessLogs())
 
+    # Suppress noisy HTTP client logs (OpenRouter/OpenAI SDK stack).
+    #
+    # These messages are emitted by the OpenAI SDK and its dependencies via
+    # stdlib logging, and then intercepted by our InterceptHandler. We silence
+    # them by raising their logger levels.
+    for name in (
+        "openai",
+        "openai._base_client",
+        "openai._client",
+        "stainless",
+        "stainless._base_client",
+        "httpx",
+        "httpcore",
+    ):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
 
 __all__ = ["setup_logging", "InterceptHandler", "SuppressHealthCheckAccessLogs"]
