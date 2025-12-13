@@ -52,13 +52,6 @@ def _raise_unavailable(exc: RuntimeError) -> None:
     ) from exc
 
 
-async def _orchestrate_or_error(payload: TaskPayload):
-    try:
-        return await task_orchestrator.orchestrate(payload)
-    except RuntimeError as exc:
-        _raise_unavailable(exc)
-
-
 async def _start_or_error(task_id: str):
     try:
         return await task_executor.start_from_store(task_id)
@@ -80,10 +73,11 @@ async def _start_or_error(task_id: str):
 async def orchestrate_task(body: TaskCreateRequest) -> Success[TaskPlanResponse]:
     """Generate prompts and a full execution plan for a task."""
 
-    _ensure_cli_available()
-
     payload = _build_payload(body)
-    result = await _orchestrate_or_error(payload)
+    try:
+        result = await task_orchestrator.orchestrate(payload)
+    except RuntimeError as exc:
+        _raise_unavailable(exc)
 
     response = TaskPlanResponse(
         task_id=payload.task_id,
@@ -133,7 +127,10 @@ async def auto_dev_task(body: TaskCreateRequest) -> Success[TaskAutoResponse]:
 
     payload = _build_payload(body)
 
-    orchestration_result = await _orchestrate_or_error(payload)
+    try:
+        orchestration_result = await task_orchestrator.orchestrate(payload)
+    except RuntimeError as exc:
+        _raise_unavailable(exc)
     started = await _start_or_error(payload.task_id)
 
     response = TaskAutoResponse(

@@ -57,6 +57,31 @@ class Settings(BaseSettings):
         ),
     )
 
+    # --- LLM / OpenRouter ---
+    OPENROUTER_API_KEY: str = Field(
+        ...,
+        description="OpenRouter API key used for LLM calls (Bearer token).",
+    )
+    OPENROUTER_BASE_URL: str = Field(
+        "https://openrouter.ai/api/v1/chat/completions",
+        description="OpenRouter Chat Completions endpoint.",
+    )
+    OPENROUTER_MODEL: str = Field(
+        "amazon/nova-2-lite-v1:free",
+        description="Default OpenRouter model identifier.",
+    )
+    OPENROUTER_TIMEOUT_SECONDS: float = Field(
+        600.0, description="Timeout (seconds) for OpenRouter requests."
+    )
+    OPENROUTER_HTTP_REFERER: str = Field(
+        "",
+        description="Optional HTTP-Referer header value for OpenRouter requests.",
+    )
+    OPENROUTER_APP_TITLE: str = Field(
+        "e2e-ai-dev-agent",
+        description="Optional X-Title header value for OpenRouter requests.",
+    )
+
     @property
     def log_level(self) -> str:
         """Compatibility alias for log level name."""
