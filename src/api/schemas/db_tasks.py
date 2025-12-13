@@ -228,3 +228,11 @@ class TaskSearchRequest(BaseModel):
     limit: Optional[int] = Field(
         None, gt=0, le=1000, description="Maximum number of tasks to return"
     )
+
+
+class ImportJiraTaskRequest(BaseModel):
+    """Schema for importing a task from Jira."""
+
+    jira_task_id: str = Field(..., min_length=1, description="Jira task ID (e.g., PROJ-123)")
+    repo_url: str = Field(..., min_length=1, description="Repository URL")
+    branch: str = Field(..., min_length=1, description="Branch name")

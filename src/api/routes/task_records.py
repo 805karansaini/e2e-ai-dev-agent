@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from src.api.schemas import (
     CreateSubTask,
     CreateTask,
+    ImportJiraTaskRequest,
     SubTaskUpdate,
     Success,
     TaskList,
@@ -25,6 +26,7 @@ from src.api.services import (
 )
 from src.service.database_handler.config import get_db_session
 from src.service.database_handler.models.task import TaskStatus, TaskType
+from src.service.jira import JiraClient, JiraConfig
 
 router = APIRouter(prefix="/db/tasks", tags=["database-tasks"])
 
@@ -226,3 +228,63 @@ def delete_sub_task(sub_task_id: str, service: TaskService = Depends(get_task_se
         _raise_http_error(exc)
 
     return None  # 204 No Content
+
+
+@router.post(
+    "/import-from-jira",
+    response_model=Success[TaskResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+async def import_task_from_jira(
+    request: ImportJiraTaskRequest,
+    service: TaskService = Depends(get_task_service),
+) -> Success[TaskResponse]:
+    """Import a task from Jira and insert it into the database."""
+    try:
+        # Initialize Jira client
+        jira_config = JiraConfig.from_env()
+        async with JiraClient(jira_config) as jira_client:
+            # Fetch task from Jira
+            jira_task = await jira_client.fetch_issue_with_subtasks(request.jira_task_id)
+            if not jira_task:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Jira task '{request.jira_task_id}' not found.",
+                )
+
+            # Convert JiraTask to CreateTask
+            create_task_data = CreateTask(
+                task_id=jira_task.key,
+                summary=jira_task.summary,
+                description=jira_task.description,
+                repo_url=request.repo_url,
+                base_branch=request.branch,
+                status=TaskStatus.PENDING.value,
+                additional_json={
+                    "jira_id": jira_task.id,
+                    "jira_status": jira_task.status.model_dump() if jira_task.status else None,
+                    "jira_assignee": jira_task.assignee.model_dump() if jira_task.assignee else None,
+                    "jira_reporter": jira_task.reporter.model_dump() if jira_task.reporter else None,
+                    "jira_priority": jira_task.priority.model_dump() if jira_task.priority else None,
+                    "jira_labels": jira_task.labels,
+                    "jira_created": jira_task.created.isoformat() if jira_task.created else None,
+                    "jira_updated": jira_task.updated.isoformat() if jira_task.updated else None,
+                },
+            )
+
+            # Create task in database
+            try:
+                task = service.create_task(create_task_data)
+            except TaskServiceError as exc:
+                _raise_http_error(exc)
+
+            return success(
+                TaskResponse.model_validate(task), status_code=status.HTTP_201_CREATED
+            )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to import task from Jira: {str(exc)}",
+        ) from exc

@@ -3,6 +3,7 @@
 from src.api.schemas.db_tasks import (
     CreateSubTask,
     CreateTask,
+    ImportJiraTaskRequest,
     SubTaskUpdate,
     TaskBase,
     TaskList,
@@ -36,4 +37,5 @@ __all__ = [
     "TaskResponse",
     "TaskList",
     "TaskSearchRequest",
+    "ImportJiraTaskRequest",
 ]
