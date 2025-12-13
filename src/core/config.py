@@ -46,6 +46,16 @@ class Settings(BaseSettings):
     JIRA_VERIFY_SSL: bool = Field(
         True, description="Whether to verify SSL certificates when calling Jira."
     )
+    BACKEND_CORS_ORIGINS: List[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+        ],
+        description=(
+            "Allowed CORS origins for the FastAPI backend. "
+            "Override in .env (comma-separated or JSON list) for other frontends."
+        ),
+    )
 
     # --- LLM / OpenRouter ---
     OPENROUTER_API_KEY: str = Field(

@@ -6,10 +6,12 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
 from src.api.middleware import install_logging_middleware
 from src.api.routes import health_router, task_execution_router, task_records_router
+from src.core.config import settings
 from src.service.database_handler import create_tables
 from src.service.tasks import task_runner
 
@@ -38,7 +40,17 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Middleware
     install_logging_middleware(app)
+
+    # CORS for frontend (configurable via settings)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.BACKEND_CORS_ORIGINS,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     app.include_router(health_router)
     app.include_router(task_execution_router)
     app.include_router(task_records_router)
