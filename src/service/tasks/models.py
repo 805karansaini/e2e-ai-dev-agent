@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, field_validator
+from typing import Literal
+
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.core.config import settings
 
@@ -77,6 +79,40 @@ class DbTaskContext(BaseModel):
     subtasks: list[DbSubtaskContext] = Field(default_factory=list)
 
 
+class OrchestratedPromptItem(BaseModel):
+    """A prompt generated for insertion into the tasks table."""
+
+    task_id: str = Field(..., min_length=1, description="Parent task identifier")
+    task_type: Literal["TASK", "SUBTASK"] = Field(
+        ..., description="Whether this prompt is for the parent or a subtask"
+    )
+    sub_task_id: str | None = Field(
+        default=None, description="Subtask identifier (required for SUBTASK prompts)"
+    )
+    prompt: str = Field(..., min_length=1, description="Prompt to persist into DB")
+    agent_summary: str | None = Field(
+        default=None, description="Optional short summary for UI/debug"
+    )
+
+    @model_validator(mode="after")
+    def _validate_type_fields(self) -> "OrchestratedPromptItem":
+        if self.task_type == "TASK":
+            if self.sub_task_id not in (None, ""):
+                raise ValueError("TASK prompt must have sub_task_id = null")
+        else:
+            if not self.sub_task_id:
+                raise ValueError("SUBTASK prompt must include sub_task_id")
+        return self
+
+
+class OrchestratedPromptOutput(BaseModel):
+    """Structured OpenRouter output: N prompts (task + subtasks)."""
+
+    prompts: list[OrchestratedPromptItem] = Field(
+        ..., description="One prompt per task/subtask row to persist"
+    )
+
+
 __all__ = [
     "TaskPayload",
     "SubtaskPlan",
@@ -84,4 +120,6 @@ __all__ = [
     "OrchestrationResult",
     "DbTaskContext",
     "DbSubtaskContext",
+    "OrchestratedPromptItem",
+    "OrchestratedPromptOutput",
 ]

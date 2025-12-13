@@ -19,9 +19,15 @@ class PromptBuilder:
         self.attachments_dir = attachments_dir
 
     def compose(
-        self, context: Union[JiraContext, DbTaskContext], payload: TaskPayload
+        self,
+        context: Union[JiraContext, DbTaskContext],
+        payload: TaskPayload,
+        *,
+        include_orchestration_preamble: bool = True,
     ) -> str:
-        orchestration = self._load_orchestration_prompt()
+        orchestration = (
+            self._load_orchestration_prompt() if include_orchestration_preamble else ""
+        )
 
         if isinstance(context, JiraContext):
             task_context_block = self._render_jira_context(context)
@@ -31,8 +37,9 @@ class PromptBuilder:
             attachments_note = self._render_db_attachments_note(context)
 
         lines: list[str] = []
-        lines.append(orchestration.strip())
-        lines.append("")
+        if include_orchestration_preamble:
+            lines.append(orchestration.strip())
+            lines.append("")
         lines.append(task_context_block.strip())
         lines.append("")
         lines.append("=== REPOSITORY CONTEXT ===")
@@ -40,6 +47,10 @@ class PromptBuilder:
         lines.append(f"Base branch: {payload.base_branch}")
         lines.append(attachments_note.strip())
         return "\n".join(lines).strip()
+
+    def orchestration_preamble(self) -> str:
+        """System-level instructions for the orchestrator model."""
+        return self._load_orchestration_prompt()
 
     def _render_jira_context(self, context: JiraContext) -> str:
         task = context.task
@@ -171,6 +182,8 @@ class PromptBuilder:
         workdir_root = self.base_dir
 
         candidates = [
+            project_root / "prompts" / "orchestration_prompt_v1.md",
+            workdir_root / "prompts" / "orchestration_prompt_v1.md",
             project_root / "prompts" / "orchestration_prompt.md",
             workdir_root / "prompts" / "orchestration_prompt.md",
             project_root / "ORCHESTRATION_PROMPT.md",
