@@ -22,7 +22,6 @@ _cli_executor = ClineExecutor(
 )
 
 task_orchestrator = TaskOrchestrator(
-    context_builder=_context_builder,
     prompt_builder=_prompt_builder,
     persistence=_persistence,
     executor=_cli_executor,

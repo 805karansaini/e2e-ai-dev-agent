@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, field_validator
+from typing import Literal
+
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from src.core.config import settings
 
@@ -58,4 +60,67 @@ class OrchestrationResult(BaseModel):
     subtask_prompts: list[SubtaskPlan] = Field(default_factory=list)
 
 
-__all__ = ["TaskPayload", "SubtaskPlan", "StoredTaskPlan", "OrchestrationResult"]
+class DbSubtaskContext(BaseModel):
+    """Database-backed subtask context used by the orchestrator."""
+
+    key: str = Field(..., min_length=1)
+    summary: str | None = None
+    description: str | None = None
+    prompt: str | None = None
+
+
+class DbTaskContext(BaseModel):
+    """Database-backed task context used by the orchestrator/prompt builder."""
+
+    task_id: str = Field(..., min_length=1)
+    summary: str | None = None
+    description: str | None = None
+    attachment_path: list[dict] | None = None
+    subtasks: list[DbSubtaskContext] = Field(default_factory=list)
+
+
+class TaskPromptItem(BaseModel):
+    """A prompt to persist for a TASK or SUBTASK row."""
+
+    task_id: str = Field(..., min_length=1, description="Parent task identifier")
+    task_type: Literal["TASK", "SUBTASK"] = Field(
+        ..., description="Whether this prompt is for the parent or a subtask"
+    )
+    sub_task_id: str | None = Field(
+        default=None, description="Subtask identifier (required for SUBTASK prompts)"
+    )
+    prompt: str = Field(..., min_length=1, description="Prompt to persist into DB")
+
+    @field_validator("sub_task_id", mode="before")
+    @classmethod
+    def _empty_subtask_id_to_none(cls, value: object) -> object:
+        # Some models emit "" instead of null; treat it as null.
+        return None if value == "" else value
+
+    @model_validator(mode="after")
+    def _validate_type_fields(self) -> "TaskPromptItem":
+        if self.task_type == "TASK" and self.sub_task_id is not None:
+            raise ValueError("TASK prompt must have sub_task_id = null")
+        if self.task_type == "SUBTASK" and self.sub_task_id is None:
+            raise ValueError("SUBTASK prompt must include sub_task_id")
+        return self
+
+
+class TaskPromptOutput(BaseModel):
+    """Structured OpenRouter output: N prompts (task + subtasks)."""
+
+    prompts: list[TaskPromptItem] = Field(
+        ..., description="One prompt per task/subtask row to persist"
+    )
+
+
+__all__ = [
+    "TaskPayload",
+    "SubtaskPlan",
+    "StoredTaskPlan",
+    "OrchestrationResult",
+    "DbTaskContext",
+    "DbSubtaskContext",
+    "TaskPromptItem",
+    "TaskPromptOutput",
+]

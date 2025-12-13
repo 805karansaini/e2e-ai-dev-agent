@@ -72,6 +72,17 @@ class TaskCRUD:
         )
 
     @staticmethod
+    def get_subtasks_by_task_id(db: Session, task_id: str) -> List[Task]:
+        """Get all subtasks for a given parent task_id."""
+        return (
+            db.query(Task)
+            .filter(Task.task_id == task_id)
+            .filter(Task.task_type == TaskType.SUBTASK)
+            .order_by(Task.sub_task_id.asc())
+            .all()
+        )
+
+    @staticmethod
     def get_tasks_by_status(db: Session, status: TaskStatus) -> List[Task]:
         """Get all tasks with a specific status."""
         return db.query(Task).filter(Task.status == status).all()

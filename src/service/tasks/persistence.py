@@ -9,7 +9,7 @@ from src.service.database_handler.config import create_tables, get_db_session
 from src.service.database_handler.models.task import Task, TaskType
 from src.service.jira import JiraContext
 
-from .models import StoredTaskPlan, TaskPayload
+from .models import DbSubtaskContext, DbTaskContext, StoredTaskPlan, TaskPayload
 
 
 class TaskPersistence:
@@ -23,6 +23,27 @@ class TaskPersistence:
 
     async def load_plan(self, task_key: str) -> StoredTaskPlan | None:
         return await asyncio.to_thread(self._load_plan_sync, task_key)
+
+    async def load_task_context(self, task_key: str) -> DbTaskContext | None:
+        """Load parent task + all subtasks from the DB (prompts may be empty)."""
+        return await asyncio.to_thread(self._load_task_context_sync, task_key)
+
+    async def persist_orchestration_prompts(
+        self,
+        *,
+        task_key: str,
+        parent_prompt: str | None,
+        subtask_prompts: dict[str, str],
+        payload: TaskPayload,
+    ) -> None:
+        """Persist generated prompts for parent/subtasks into the DB."""
+        await asyncio.to_thread(
+            self._persist_orchestration_prompts_sync,
+            task_key,
+            parent_prompt,
+            subtask_prompts,
+            payload,
+        )
 
     # ---- Internals --------------------------------------------------------------
     def _persist_sync(self, context: JiraContext, payload: TaskPayload) -> None:
@@ -145,6 +166,17 @@ class TaskPersistence:
                 if row.prompt
             ]
 
+            # If no subtask prompts exist, allow executing the parent prompt (if present).
+            if not subtask_prompts and (parent.prompt or "").strip():
+                subtask_prompts = [
+                    SubtaskPlan(
+                        subtask_key=task_key,
+                        summary=parent.summary,
+                        description=parent.description,
+                        prompt=(parent.prompt or "").strip(),
+                    )
+                ]
+
             return StoredTaskPlan(
                 task_key=task_key,
                 repo_url=parent.repo_url or "",
@@ -152,6 +184,110 @@ class TaskPersistence:
                 detailed_description=parent.description,
                 subtask_prompts=subtask_prompts,
             )
+        finally:
+            db.close()
+
+    def _load_task_context_sync(self, task_key: str) -> DbTaskContext | None:
+        """Load parent + subtasks regardless of whether prompts exist."""
+        create_tables()
+
+        db = get_db_session()
+        try:
+            parent = (
+                db.query(Task)
+                .filter(Task.task_id == task_key)
+                .filter(Task.task_type == TaskType.TASK)
+                .filter(Task.sub_task_id.is_(None))
+                .first()
+            )
+            if parent is None:
+                return None
+
+            subtasks = (
+                db.query(Task)
+                .filter(Task.task_id == task_key)
+                .filter(Task.task_type == TaskType.SUBTASK)
+                .order_by(Task.sub_task_id.asc())
+                .all()
+            )
+
+            return DbTaskContext(
+                task_id=task_key,
+                summary=parent.summary,
+                description=parent.description,
+                attachment_path=parent.attachment_path,
+                subtasks=[
+                    DbSubtaskContext(
+                        key=row.sub_task_id or "",
+                        summary=row.summary,
+                        description=row.description,
+                        prompt=row.prompt,
+                    )
+                    for row in subtasks
+                    if row.sub_task_id
+                ],
+            )
+        finally:
+            db.close()
+
+    def _persist_orchestration_prompts_sync(
+        self,
+        task_key: str,
+        parent_prompt: str | None,
+        subtask_prompts: dict[str, str],
+        payload: TaskPayload,
+    ) -> None:
+        create_tables()
+
+        db = get_db_session()
+        try:
+            parent = (
+                db.query(Task)
+                .filter(Task.task_id == task_key)
+                .filter(Task.task_type == TaskType.TASK)
+                .filter(Task.sub_task_id.is_(None))
+                .first()
+            )
+            if parent is None:
+                raise RuntimeError(f"Task '{task_key}' not found in DB.")
+
+            # Keep repo fields in sync with orchestration request.
+            parent.repo_url = payload.repo_url
+            parent.base_branch = payload.base_branch
+
+            if parent_prompt is not None:
+                cleaned = parent_prompt.strip()
+                parent.prompt = cleaned or None
+
+            # Update all subtask prompts.
+            for sub_key, prompt in (subtask_prompts or {}).items():
+                if not sub_key:
+                    continue
+                if sub_key == task_key:
+                    # Never treat the parent key as a subtask row.
+                    continue
+
+                row = (
+                    db.query(Task)
+                    .filter(Task.sub_task_id == sub_key)
+                    .filter(Task.task_type == TaskType.SUBTASK)
+                    .first()
+                )
+                if row is None:
+                    # Best-effort: create missing subtask rows.
+                    row = Task(
+                        task_id=task_key,
+                        sub_task_id=sub_key,
+                        task_type=TaskType.SUBTASK,
+                    )
+                    db.add(row)
+
+                row.repo_url = payload.repo_url
+                row.base_branch = payload.base_branch
+                cleaned = (prompt or "").strip()
+                row.prompt = cleaned or None
+
+            db.commit()
         finally:
             db.close()
 

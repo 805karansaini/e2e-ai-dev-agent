@@ -75,6 +75,11 @@ class Settings(BaseSettings):
         "amazon/nova-2-lite-v1:free",
         description="Default OpenRouter model identifier.",
     )
+    OPENROUTER_MODEL: str = Field(
+        "openai/gpt-5-nano",
+        description="Default OpenRouter model identifier.",
+    )
+
     OPENROUTER_TIMEOUT_SECONDS: float = Field(
         600.0, description="Timeout (seconds) for OpenRouter requests."
     )

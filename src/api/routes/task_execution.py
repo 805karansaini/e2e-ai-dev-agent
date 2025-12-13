@@ -52,16 +52,24 @@ def _raise_unavailable(exc: RuntimeError) -> None:
     ) from exc
 
 
-async def _start_or_error(task_id: str):
+async def _start_or_error(body: TaskCreateRequest) -> list[str]:
+    _ensure_cli_available()
     try:
-        return await task_executor.start_from_store(task_id)
+        return await task_executor.start_task(
+            task_key=body.task_id, repo_url=body.repo_url, base_branch=body.base_branch
+        )
     except RuntimeError as exc:
+        message = str(exc)
         status_code = (
             status.HTTP_404_NOT_FOUND
-            if "No stored prompts" in str(exc)
+            if "not found" in message.lower()
+            else status.HTTP_400_BAD_REQUEST
+            if "no stored" in message.lower() or "malformed" in message.lower()
             else status.HTTP_503_SERVICE_UNAVAILABLE
+            if "not available" in message.lower()
+            else status.HTTP_500_INTERNAL_SERVER_ERROR
         )
-        raise HTTPException(status_code=status_code, detail=str(exc)) from exc
+        raise HTTPException(status_code=status_code, detail=message) from exc
 
 
 @router.post(
@@ -90,13 +98,6 @@ async def orchestrate_task(body: TaskCreateRequest) -> Success[TaskPlanResponse]
     return success(response, status_code=status.HTTP_202_ACCEPTED)
 
 
-@router.post("/tasks", include_in_schema=False)
-async def orchestrate_task_legacy(body: TaskCreateRequest) -> Success[TaskPlanResponse]:
-    """Backward-compatible entrypoint that maps to Task Orchestrator."""
-
-    return await orchestrate_task(body)
-
-
 @router.post(
     "/tasks/start",
     response_model=Success[TaskStartResponse],
@@ -106,9 +107,7 @@ async def orchestrate_task_legacy(body: TaskCreateRequest) -> Success[TaskPlanRe
 async def start_task(body: TaskCreateRequest) -> Success[TaskStartResponse]:
     """Start execution using stored prompts for the task and its subtasks."""
 
-    _ensure_cli_available()
-
-    started = await _start_or_error(body.task_id)
+    started = await _start_or_error(body)
 
     response = TaskStartResponse(task_id=body.task_id, started_subtasks=started)
     return success(response, status_code=status.HTTP_202_ACCEPTED)
@@ -123,15 +122,14 @@ async def start_task(body: TaskCreateRequest) -> Success[TaskStartResponse]:
 async def auto_dev_task(body: TaskCreateRequest) -> Success[TaskAutoResponse]:
     """Orchestrate and start execution in a single request."""
 
-    _ensure_cli_available()
-
     payload = _build_payload(body)
 
     try:
         orchestration_result = await task_orchestrator.orchestrate(payload)
     except RuntimeError as exc:
         _raise_unavailable(exc)
-    started = await _start_or_error(payload.task_id)
+
+    started = await _start_or_error(body)
 
     response = TaskAutoResponse(
         task_id=payload.task_id,

@@ -1,15 +1,20 @@
 from __future__ import annotations
 
-from typing import Iterable, Optional
+from typing import Optional
 
 from loguru import logger
 
 from src.core.config import settings
-from src.service.jira.prompt_models import SubtaskPrompt
+from src.service.llm import OpenRouterLLM
 
 from .cli_executor import ClineExecutor
-from .context_builder import JiraContextBuilder
-from .models import OrchestrationResult, SubtaskPlan, TaskPayload
+from .models import (
+    DbTaskContext,
+    OrchestrationResult,
+    SubtaskPlan,
+    TaskPayload,
+    TaskPromptOutput,
+)
 from .persistence import TaskPersistence
 from .prompt_builder import PromptBuilder
 
@@ -20,12 +25,10 @@ class TaskOrchestrator:
     def __init__(
         self,
         *,
-        context_builder: JiraContextBuilder,
         prompt_builder: PromptBuilder,
         persistence: TaskPersistence,
         executor: Optional[ClineExecutor] = None,
     ) -> None:
-        self._context_builder = context_builder
         self._prompt_builder = prompt_builder
         self._persistence = persistence
         self._executor = executor or ClineExecutor(
@@ -45,44 +48,67 @@ class TaskOrchestrator:
         if use_cline and not self._executor.cli_available:
             raise RuntimeError("CLINE CLI binary is not available.")
 
-        context = await self._context_builder.build(payload)
-
-        # Ensure there is at least one prompt even when no subtasks exist.
-        if not context.subtask_prompts:
-            context.subtask_prompts.append(
-                SubtaskPrompt(
-                    key=payload.task_id,
-                    summary="Full task",
-                    description=context.detailed_description,
-                    prompt=self._build_fallback_prompt(payload),
-                )
+        context = await self._persistence.load_task_context(payload.task_id)
+        if context is None:
+            raise RuntimeError(
+                f"Task '{payload.task_id}' not found in DB. Import it first."
             )
+        logger.debug(f"Context: {context}")
 
-        await self._persistence.persist(context, payload)
+        # System prompt for the orchestrator model.
+        orchestration_preamble = self._prompt_builder.orchestration_preamble()
 
-        orchestration_prompt = self._prompt_builder.compose(context, payload)
-        subtask_plans = self._map_subtasks(context.subtask_prompts)
-        simple_prompt = self._build_simple_prompt(payload, subtask_plans)
-
-        if use_cline:
-            # Kick off the orchestration prompt through the CLINE CLI. This runs the
-            # high-level planning prompt; detailed subtask prompts are persisted above.
-            await self._executor.execute(orchestration_prompt, payload)
-        else:
-            high_level_plan = await self._generate_high_level_plan_via_openrouter(
-                prompt=orchestration_prompt
-            )
-            logger.info(
-                "Generated high-level plan via OpenRouter for task '{task_id}':\n{plan}\n\n",
-                task_id=payload.task_id,
-                plan=high_level_plan,
-            )
-
-        logger.info(
-            "Generated orchestration prompt for task '{task_id}':\n{prompt}",
-            task_id=payload.task_id,
-            prompt=orchestration_prompt,
+        # Context for the orchestrator model.
+        orchestration_context = self._prompt_builder.compose(
+            context, payload, include_orchestration_preamble=False
         )
+        logger.debug(f"Orchestration context: {orchestration_context}")
+
+        structured = await self._generate_high_level_plan_via_openrouter(
+            system_preamble=orchestration_preamble,
+            prompt=orchestration_context,
+            context=context,
+            payload=payload,
+        )
+
+        logger.debug(f"Structured: {structured}")
+
+        parent_prompt, subtask_prompt_map = self._validate_and_extract_prompts(
+            structured=structured, context=context, payload=payload
+        )
+        logger.debug(f"Parent prompt: {parent_prompt}")
+        logger.debug(f"Subtask prompt map: {subtask_prompt_map}")
+
+        await self._persistence.persist_orchestration_prompts(
+            task_key=payload.task_id,
+            parent_prompt=parent_prompt,
+            subtask_prompts=subtask_prompt_map,
+            payload=payload,
+        )
+
+        # TODO: Remove later
+        # subtask_plans = self._build_subtask_plans_from_db_context(
+        #     context=context,
+        #     payload=payload,
+        #     parent_prompt=parent_prompt,
+        #     subtask_prompt_map=subtask_prompt_map,
+        # )
+
+        # logger.debug(f"Subtask plans: {subtask_plans}")
+
+        # simple_prompt = self._build_simple_prompt(payload, subtask_plans)
+        # logger.debug(f"Simple prompt: {simple_prompt}")
+
+        # orchestration_prompt = parent_prompt
+
+        # if use_cline:
+        #     # Kick off the orchestration prompt through the CLINE CLI. This runs the
+        #     # high-level planning prompt; per-item prompts are persisted above.
+        #     await self._executor.execute(orchestration_prompt, payload)
+
+        orchestration_prompt = ""
+        simple_prompt = ""
+        subtask_plans = []
 
         return OrchestrationResult(
             task_id=payload.task_id,
@@ -94,55 +120,131 @@ class TaskOrchestrator:
         )
 
     @staticmethod
-    async def _generate_high_level_plan_via_openrouter(*, prompt: str) -> str:
-        """Call OpenRouter using the OpenAI Python SDK (OpenAI-compatible endpoint)."""
+    async def _generate_high_level_plan_via_openrouter(
+        *,
+        system_preamble: str,
+        prompt: str,
+        context: DbTaskContext,
+        payload: TaskPayload,
+    ) -> TaskPromptOutput:
+        """Call OpenRouter to return structured prompts (task + subtasks).
 
-        api_key = settings.OPENROUTER_API_KEY.strip()
+        This uses OpenAI's `response_format: json_schema` so the model returns
+        machine-insertable output for the database.
+        """
+        system_prompt = system_preamble
 
-        try:
-            from openai import AsyncOpenAI  # type: ignore[import-not-found]
-        except ImportError as exc:  # pragma: no cover
-            raise RuntimeError(
-                "openai Python package is not installed. Add `openai` to requirements "
-                "and install dependencies to enable OpenRouter calls."
-            ) from exc
+        work_items_lines: list[str] = []
+        work_items_lines.append(f"- TASK: task_id={context.task_id} (sub_task_id=null)")
+        for st in context.subtasks or []:
+            if not st.key:
+                continue
+            work_items_lines.append(
+                f"- SUBTASK: task_id={context.task_id}, sub_task_id={st.key}"
+            )
 
-        default_headers: dict[str, str] = {}
-        if settings.OPENROUTER_HTTP_REFERER.strip():
-            default_headers["HTTP-Referer"] = settings.OPENROUTER_HTTP_REFERER
-        if settings.OPENROUTER_APP_TITLE.strip():
-            default_headers["X-Title"] = settings.OPENROUTER_APP_TITLE
+        subtasks_exist = any(st.key for st in (context.subtasks or []))
 
-        client = AsyncOpenAI(
-            api_key=api_key,
-            base_url="https://openrouter.ai/api/v1",
-            default_headers=default_headers or None,
-            timeout=settings.OPENROUTER_TIMEOUT_SECONDS,
+        if not subtasks_exist:
+            behavior_note = (
+                "NO SUBTASKS EXIST.\n"
+                "Generate exactly 1 prompt for the TASK that:\n"
+                "- Is directly executable by a CLI agent\n"
+                "- Focuses on WHAT to implement, not HOW (let the agent decide implementation details)\n"
+                "- Remains concise (2-4 sentences)"
+            )
+        else:
+            behavior_note = (
+                "SUBTASKS EXIST.\n"
+                "Generate exactly 1 TASK prompt + 1 prompt per SUBTASK:\n\n"
+                "TASK prompt (non-executable high-level summary of task and subtasks):\n"
+                "- Describe the overall objective and how subtasks relate\n"
+                "- Specify critical constraints, dependencies, or ordering requirements\n"
+                "- Do NOT provide implementation steps\n"
+                "- Keep to 3-5 sentences\n\n"
+                "SUBTASK prompts (executable units):\n"
+                "- Each must be independently executable by a CLI agent\n"
+                "- Focus on WHAT to implement for that specific subtask\n"
+                "- Include acceptance criteria specific to the subtask\n"
+                "- Reference parent task context only when necessary\n"
+                "- Do NOT provide implementation steps\n"
+                "- Keep each to 2-4 sentences"
+            )
+
+        messages = [
+            {
+                "role": "system",
+                "content": system_prompt,
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Generate structured prompts for database persistence.\n"
+                    f"Required: 1 TASK prompt + {len([w for w in work_items_lines if 'SUBTASK' in w])} SUBTASK prompt(s)\n"
+                    f"Task ID: {context.task_id}\n\n"
+                    f"{behavior_note}\n\n"
+                    "=== CRITICAL REQUIREMENTS ===\n"
+                    "1. EXACT ID MATCHING: Use only the work item IDs listed below. Never invent or modify IDs.\n"
+                    "2. IMPLEMENTATION FOCUS: Prompts should specify WHAT needs to be done, not HOW to do it.\n"
+                    "3. NO ASSUMPTIONS: Don't add dependencies, tools, or services not mentioned in the context.\n"
+                    "4. CLARITY OVER LENGTH: Shorter, clearer prompts are better than verbose ones.\n\n"
+                    "=== WORK ITEMS (use these IDs exactly) ===\n"
+                    + "\n".join(work_items_lines)
+                    + "\n\n"
+                    "=== REPOSITORY INFO ===\n"
+                    f"Repository: {payload.repo_url}\n"
+                    f"Base Branch: {payload.base_branch}\n\n"
+                    "=== TASK CONTEXT ===\n" + prompt + "\n\n"
+                    "Generate prompts that are:\n"
+                    "- Actionable: Clear about what success looks like\n"
+                    "- Minimal: No redundant information from context\n"
+                    "- Scoped: Each subtask prompt is independently completable\n"
+                    "- Verifiable: Includes concrete acceptance criteria"
+                ),
+            },
+        ]
+
+        llm = OpenRouterLLM.from_settings()
+        return await llm.chat_json_schema(
+            messages=messages,
+            response_model=TaskPromptOutput,
+            schema_name="TaskPromptOutput",
         )
-
-        resp = await client.chat.completions.create(
-            model=settings.OPENROUTER_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
-        )
-
-        content = (resp.choices[0].message.content or "").strip()
-        if not content:
-            raise RuntimeError("OpenRouter returned an empty completion.")
-        return content
 
     @staticmethod
-    def _map_subtasks(subtasks: Iterable[SubtaskPrompt]) -> list[SubtaskPlan]:
-        return [
-            SubtaskPlan(
-                subtask_key=sub.key,
-                summary=sub.summary,
-                description=sub.description,
-                prompt=sub.prompt,
+    def _build_subtask_plans_from_db_context(
+        *,
+        context: DbTaskContext,
+        payload: TaskPayload,
+        parent_prompt: str,
+        subtask_prompt_map: dict[str, str],
+    ) -> list[SubtaskPlan]:
+        # API response should always include at least one "work item" prompt.
+        subtasks = [st for st in (context.subtasks or []) if st.key]
+        if not subtasks:
+            return [
+                SubtaskPlan(
+                    subtask_key=payload.task_id,
+                    summary=context.summary or "Full task",
+                    description=context.description,
+                    prompt=parent_prompt,
+                )
+            ]
+
+        plans: list[SubtaskPlan] = []
+        for st in subtasks:
+            prompt = (subtask_prompt_map.get(st.key) or "").strip()
+            if not prompt:
+                continue
+            plans.append(
+                SubtaskPlan(
+                    subtask_key=st.key,
+                    summary=st.summary,
+                    description=st.description,
+                    prompt=prompt,
+                )
             )
-            for sub in subtasks
-            if sub.prompt
-        ]
+        return plans
 
     @staticmethod
     def _build_simple_prompt(
@@ -182,6 +284,64 @@ class TaskOrchestrator:
             f"Task ID: {payload.task_id}, Repo: {payload.repo_url}, "
             f"Base branch: {payload.base_branch}."
         )
+
+    @staticmethod
+    def _validate_and_extract_prompts(
+        *,
+        structured: TaskPromptOutput,
+        context: DbTaskContext,
+        payload: TaskPayload,
+    ) -> tuple[str, dict[str, str]]:
+        expected_subtask_keys = [st.key for st in (context.subtasks or []) if st.key]
+        expected_total = 1 + len(expected_subtask_keys)
+
+        items = structured.prompts or []
+        if len(items) != expected_total:
+            raise RuntimeError(
+                f"OpenRouter returned {len(items)} prompt items, expected {expected_total}."
+            )
+
+        parent_candidates = [
+            it
+            for it in items
+            if it.task_type == "TASK"
+            and it.task_id == payload.task_id
+            and it.sub_task_id is None
+        ]
+        if len(parent_candidates) != 1:
+            raise RuntimeError("OpenRouter must return exactly one TASK prompt item.")
+        parent_prompt = (parent_candidates[0].prompt or "").strip()
+        if not parent_prompt:
+            raise RuntimeError("TASK prompt is empty.")
+
+        subtask_map: dict[str, str] = {}
+        for it in items:
+            if it.task_type != "SUBTASK":
+                continue
+            if it.task_id != payload.task_id:
+                raise RuntimeError(
+                    f"SUBTASK prompt has unexpected task_id '{it.task_id}'."
+                )
+            sub_id = (it.sub_task_id or "").strip()
+            if sub_id not in expected_subtask_keys:
+                raise RuntimeError(
+                    f"SUBTASK prompt returned unknown sub_task_id '{sub_id}'."
+                )
+            if sub_id in subtask_map:
+                raise RuntimeError(f"Duplicate SUBTASK prompt for '{sub_id}'.")
+            pr = (it.prompt or "").strip()
+            if not pr:
+                raise RuntimeError(f"SUBTASK prompt for '{sub_id}' is empty.")
+            subtask_map[sub_id] = pr
+
+        if expected_subtask_keys:
+            missing = [k for k in expected_subtask_keys if k not in subtask_map]
+            if missing:
+                raise RuntimeError(
+                    f"OpenRouter did not return prompts for subtasks: {', '.join(missing)}"
+                )
+
+        return parent_prompt, subtask_map
 
 
 __all__ = ["TaskOrchestrator"]

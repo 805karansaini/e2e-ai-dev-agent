@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 from textwrap import dedent
-from typing import Iterable
+from typing import Iterable, Union
 
 from loguru import logger
 
 from src.service.jira import JiraContext
 
-from .models import TaskPayload
+from .models import DbTaskContext, TaskPayload
 
 
 class PromptBuilder:
@@ -18,21 +18,39 @@ class PromptBuilder:
         self.base_dir = base_dir
         self.attachments_dir = attachments_dir
 
-    def compose(self, context: JiraContext, payload: TaskPayload) -> str:
-        orchestration = self._load_orchestration_prompt()
-        jira_context_block = self._render_jira_context(context)
-        attachments_note = self._render_attachments_note(context)
+    def compose(
+        self,
+        context: Union[JiraContext, DbTaskContext],
+        payload: TaskPayload,
+        *,
+        include_orchestration_preamble: bool = True,
+    ) -> str:
+        orchestration = (
+            self._load_orchestration_prompt() if include_orchestration_preamble else ""
+        )
+
+        if isinstance(context, JiraContext):
+            task_context_block = self._render_jira_context(context)
+            attachments_note = self._render_attachments_note(context)
+        else:
+            task_context_block = self._render_db_context(context)
+            attachments_note = self._render_db_attachments_note(context)
 
         lines: list[str] = []
-        lines.append(orchestration.strip())
-        lines.append("")
-        lines.append(jira_context_block.strip())
+        if include_orchestration_preamble:
+            lines.append(orchestration.strip())
+            lines.append("")
+        lines.append(task_context_block.strip())
         lines.append("")
         lines.append("=== REPOSITORY CONTEXT ===")
         lines.append(f"Repository URL: {payload.repo_url}")
         lines.append(f"Base branch: {payload.base_branch}")
         lines.append(attachments_note.strip())
         return "\n".join(lines).strip()
+
+    def orchestration_preamble(self) -> str:
+        """System-level instructions for the orchestrator model."""
+        return self._load_orchestration_prompt()
 
     def _render_jira_context(self, context: JiraContext) -> str:
         task = context.task
@@ -81,6 +99,64 @@ class PromptBuilder:
         lines.extend(self._indent_block(samples_block, prefix="  "))
         return "\n".join(lines).strip()
 
+    def _render_db_context(self, context: DbTaskContext) -> str:
+        labels = "N/A"
+        summary = context.summary or "No summary provided"
+        description = context.description or "No description provided."
+
+        subtasks = list(context.subtasks or [])
+        lines: list[str] = []
+        lines.append("=== TASK CONTEXT (DB) ===")
+        lines.append(f"Main task: {context.task_id}: {summary}")
+        lines.append(f"Labels: {labels}")
+        lines.append("Description:")
+        lines.extend(self._indent_block(description, prefix="  "))
+        lines.append("")
+        lines.append("Subtasks:")
+
+        if not subtasks:
+            lines.append(
+                "- (none) DB has no subtasks; treat the main task as one work item."
+            )
+        else:
+            for sub in subtasks:
+                sub_summary = sub.summary or "No summary"
+                lines.append(f"- {sub.key}: {sub_summary}")
+                sub_description = (
+                    sub.description or "No description provided."
+                ).strip()
+                lines.append("  Description:")
+                lines.extend(self._indent_block(sub_description, prefix="    "))
+
+        return "\n".join(lines).strip()
+
+    def _render_db_attachments_note(self, context: DbTaskContext) -> str:
+        attachments = context.attachment_path or []
+        if not attachments:
+            return "Attachments: none"
+
+        # attachment_path rows are stored as [{"filename": ..., "path": ...}, ...]
+        samples: list[str] = []
+        for item in attachments[:8]:
+            if not isinstance(item, dict):
+                continue
+            filename = item.get("filename")
+            path = item.get("path")
+            if filename and path:
+                samples.append(f"{filename} ({path})")
+            elif path:
+                samples.append(str(path))
+        if len(attachments) > 8:
+            samples.append("... (more omitted)")
+
+        lines: list[str] = []
+        lines.append(f"Attachments: {len(attachments)} item(s) recorded in DB.")
+        lines.append("Sample files:")
+        lines.extend(
+            self._indent_block("\n".join(f"- {s}" for s in samples), prefix="  ")
+        )
+        return "\n".join(lines).strip()
+
     @staticmethod
     def _format_attachment_samples(paths: Iterable[Path], *, limit: int) -> list[str]:
         items: list[str] = []
@@ -106,6 +182,8 @@ class PromptBuilder:
         workdir_root = self.base_dir
 
         candidates = [
+            project_root / "prompts" / "orchestration_prompt_v1.md",
+            workdir_root / "prompts" / "orchestration_prompt_v1.md",
             project_root / "prompts" / "orchestration_prompt.md",
             workdir_root / "prompts" / "orchestration_prompt.md",
             project_root / "ORCHESTRATION_PROMPT.md",
