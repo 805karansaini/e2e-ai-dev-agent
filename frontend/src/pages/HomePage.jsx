@@ -150,6 +150,139 @@ function TaskRow({ task, isSubtask = false, onEdit, onAddSubtask }) {
   )
 }
 
+function ImportTaskModal({ open, onClose, onImport }) {
+  const [jiraTaskId, setJiraTaskId] = useState('')
+  const [repoUrl, setRepoUrl] = useState('')
+  const [branch, setBranch] = useState('')
+  const [isImporting, setIsImporting] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+
+    setJiraTaskId('')
+    setRepoUrl('')
+    setBranch('')
+  }, [open])
+
+  if (!open) {
+    return null
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault()
+
+    if (!jiraTaskId.trim()) {
+      toast.error('Jira Task ID is required.')
+      return
+    }
+
+    if (!repoUrl.trim()) {
+      toast.error('Repository URL is required.')
+      return
+    }
+
+    if (!branch.trim()) {
+      toast.error('Branch is required.')
+      return
+    }
+
+    try {
+      setIsImporting(true)
+      await onImport({
+        jira_task_id: jiraTaskId.trim(),
+        repo_url: repoUrl.trim(),
+        branch: branch.trim(),
+      })
+      onClose()
+    } catch {
+      // Error surfaced via toast in caller
+    } finally {
+      setIsImporting(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 px-4 py-8"
+      aria-modal="true"
+      role="dialog"
+    >
+      <div
+        className="relative w-full max-w-2xl rounded-2xl bg-white shadow-xl transition-colors dark:border dark:border-slate-800 dark:bg-slate-900"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4 transition-colors sm:px-6 dark:border-slate-800">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900 dark:text-white sm:text-lg">
+              Import Task from Jira
+            </h3>
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-300 sm:text-sm">
+              Import a task from Jira and add it to the database.
+            </p>
+          </div>
+
+          <div className="h-8 w-8" />
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4 px-5 py-4 sm:px-6 sm:py-5">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-slate-900 dark:text-slate-100">Jira Task ID</span>
+            <input
+              type="text"
+              value={jiraTaskId}
+              onChange={(event) => setJiraTaskId(event.target.value)}
+              placeholder="PROJ-123"
+              className="input-base font-mono text-xs sm:text-sm"
+              required
+            />
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Enter the Jira task ID (e.g., PROJ-123)
+            </p>
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-slate-900 dark:text-slate-100">Repository URL</span>
+            <input
+              type="text"
+              value={repoUrl}
+              onChange={(event) => setRepoUrl(event.target.value)}
+              placeholder="https://github.com/example/repo"
+              className="input-base"
+              required
+            />
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-slate-900 dark:text-slate-100">Branch</span>
+            <input
+              type="text"
+              value={branch}
+              onChange={(event) => setBranch(event.target.value)}
+              placeholder="main"
+              className="input-base"
+              required
+            />
+          </label>
+
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isImporting}
+              className="btn-ghost min-w-[96px]"
+            >
+              Cancel
+            </button>
+            <button type="submit" disabled={isImporting} className="btn-primary min-w-[130px]">
+              {isImporting ? 'Importing…' : 'Import Task'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 function CreateTaskModal({ open, onClose, isSubtask, parentTask, onCreate }) {
   const [taskId, setTaskId] = useState('')
   const [subTaskId, setSubTaskId] = useState('')
@@ -539,6 +672,9 @@ function HomePage() {
   const [isLoading, setIsLoading] = useState(false)
   const [expanded, setExpanded] = useState(() => new Set())
   const [editing, setEditing] = useState(null)
+  const [importModal, setImportModal] = useState({
+    open: false,
+  })
   const [createModal, setCreateModal] = useState({
     open: false,
     isSubtask: false,
@@ -588,8 +724,12 @@ function HomePage() {
     setEditing(null)
   }
 
-  function handleOpenCreateTask() {
-    setCreateModal({ open: true, isSubtask: false, parentTask: null })
+  function handleOpenImportTask() {
+    setImportModal({ open: true })
+  }
+
+  function handleCloseImport() {
+    setImportModal({ open: false })
   }
 
   function handleOpenCreateSubtask(task) {
@@ -652,6 +792,22 @@ function HomePage() {
     }
   }
 
+  async function handleImportTask(payload) {
+    try {
+      const response = await axios.post(`${API_BASE_URL}/db/tasks/import-from-jira`, payload)
+      await loadTasks()
+      toast.success('Task imported from Jira successfully.')
+      return response.data
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error('Error importing task from Jira:', error)
+
+      const message = buildErrorMessage(error, 'Failed to import task from Jira.')
+      toast.error(message)
+      throw error
+    }
+  }
+
   async function handleCreateTask({ isSubtask, payload }) {
     try {
       const endpoint = isSubtask ? '/db/tasks/sub-task' : '/db/tasks'
@@ -687,13 +843,13 @@ function HomePage() {
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
-            onClick={handleOpenCreateTask}
+            onClick={handleOpenImportTask}
             className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-primary to-indigo-500 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:from-primary-soft hover:to-indigo-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-slate-900"
           >
             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-sm leading-none">
               +
             </span>
-            <span>New Task</span>
+            <span>Import Task</span>
           </button>
         </div>
       </header>
@@ -779,6 +935,12 @@ function HomePage() {
           </div>
         </div>
       </div>
+
+      <ImportTaskModal
+        open={importModal.open}
+        onClose={handleCloseImport}
+        onImport={handleImportTask}
+      />
 
       <CreateTaskModal
         open={createModal.open}
