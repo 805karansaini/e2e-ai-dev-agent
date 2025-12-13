@@ -58,4 +58,30 @@ class OrchestrationResult(BaseModel):
     subtask_prompts: list[SubtaskPlan] = Field(default_factory=list)
 
 
-__all__ = ["TaskPayload", "SubtaskPlan", "StoredTaskPlan", "OrchestrationResult"]
+class DbSubtaskContext(BaseModel):
+    """Database-backed subtask context used by the orchestrator."""
+
+    key: str = Field(..., min_length=1)
+    summary: str | None = None
+    description: str | None = None
+    prompt: str | None = None
+
+
+class DbTaskContext(BaseModel):
+    """Database-backed task context used by the orchestrator/prompt builder."""
+
+    task_id: str = Field(..., min_length=1)
+    summary: str | None = None
+    description: str | None = None
+    attachment_path: list[dict] | None = None
+    subtasks: list[DbSubtaskContext] = Field(default_factory=list)
+
+
+__all__ = [
+    "TaskPayload",
+    "SubtaskPlan",
+    "StoredTaskPlan",
+    "OrchestrationResult",
+    "DbTaskContext",
+    "DbSubtaskContext",
+]

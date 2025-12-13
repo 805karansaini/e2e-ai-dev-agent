@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from textwrap import dedent
 from typing import Iterable, Optional
 
 from loguru import logger
@@ -8,8 +9,7 @@ from src.core.config import settings
 from src.service.jira.prompt_models import SubtaskPrompt
 
 from .cli_executor import ClineExecutor
-from .context_builder import JiraContextBuilder
-from .models import OrchestrationResult, SubtaskPlan, TaskPayload
+from .models import DbTaskContext, OrchestrationResult, SubtaskPlan, TaskPayload
 from .persistence import TaskPersistence
 from .prompt_builder import PromptBuilder
 
@@ -20,12 +20,10 @@ class TaskOrchestrator:
     def __init__(
         self,
         *,
-        context_builder: JiraContextBuilder,
         prompt_builder: PromptBuilder,
         persistence: TaskPersistence,
         executor: Optional[ClineExecutor] = None,
     ) -> None:
-        self._context_builder = context_builder
         self._prompt_builder = prompt_builder
         self._persistence = persistence
         self._executor = executor or ClineExecutor(
@@ -45,24 +43,62 @@ class TaskOrchestrator:
         if use_cline and not self._executor.cli_available:
             raise RuntimeError("CLINE CLI binary is not available.")
 
-        context = await self._context_builder.build(payload)
+        context = await self._persistence.load_task_context(payload.task_id)
+        if context is None:
+            raise RuntimeError(
+                f"Task '{payload.task_id}' not found in DB. Import it first."
+            )
 
-        # Ensure there is at least one prompt even when no subtasks exist.
-        if not context.subtask_prompts:
-            context.subtask_prompts.append(
+        # Build execution prompts for each subtask; if no subtasks exist, treat
+        # the parent task as a single work item and store the prompt on the parent.
+        subtask_prompts: list[SubtaskPrompt] = []
+        for st in context.subtasks or []:
+            if not st.key:
+                continue
+            subtask_prompts.append(
                 SubtaskPrompt(
-                    key=payload.task_id,
-                    summary="Full task",
-                    description=context.detailed_description,
-                    prompt=self._build_fallback_prompt(payload),
+                    key=st.key,
+                    summary=st.summary,
+                    description=st.description,
+                    prompt=self._compose_db_subtask_prompt(
+                        context, st.key, st.summary, st.description
+                    ),
                 )
             )
 
-        await self._persistence.persist(context, payload)
+        has_subtasks = bool(subtask_prompts)
+        # Always generate a parent-task prompt as well (stored on TASK row).
+        parent_prompt: str | None = self._compose_db_task_prompt(
+            context, payload, has_subtasks=has_subtasks
+        )
+        if not has_subtasks:
+            # Preserve prior behavior: surface at least one prompt in the response,
+            # but do NOT persist this as a SUBTASK row (it's stored on the parent task).
+            subtask_prompts.append(
+                SubtaskPrompt(
+                    key=payload.task_id,
+                    summary="Full task",
+                    description=context.description,
+                    prompt=parent_prompt,
+                )
+            )
+
+        await self._persistence.persist_orchestration_prompts(
+            task_key=payload.task_id,
+            parent_prompt=parent_prompt,
+            subtask_prompts={sp.key: sp.prompt for sp in subtask_prompts if sp.prompt},
+            payload=payload,
+        )
 
         orchestration_prompt = self._prompt_builder.compose(context, payload)
-        subtask_plans = self._map_subtasks(context.subtask_prompts)
+        subtask_plans = self._map_subtasks(subtask_prompts)
         simple_prompt = self._build_simple_prompt(payload, subtask_plans)
+
+        logger.debug(
+            "Generated orchestration prompt for task '{task_id}':\n{prompt}",
+            task_id=payload.task_id,
+            prompt=orchestration_prompt,
+        )
 
         if use_cline:
             # Kick off the orchestration prompt through the CLINE CLI. This runs the
@@ -78,12 +114,7 @@ class TaskOrchestrator:
                 plan=high_level_plan,
             )
 
-        logger.info(
-            "Generated orchestration prompt for task '{task_id}':\n{prompt}",
-            task_id=payload.task_id,
-            prompt=orchestration_prompt,
-        )
-
+        # TODO INSERT THAT PROMPTS FOR TASK AND SUBTASKS INTO THE DATABASE
         return OrchestrationResult(
             task_id=payload.task_id,
             repo_url=payload.repo_url,
@@ -182,6 +213,57 @@ class TaskOrchestrator:
             f"Task ID: {payload.task_id}, Repo: {payload.repo_url}, "
             f"Base branch: {payload.base_branch}."
         )
+
+    @staticmethod
+    def _compose_db_subtask_prompt(
+        context: DbTaskContext,
+        subtask_key: str,
+        subtask_summary: str | None,
+        subtask_description: str | None,
+    ) -> str:
+        parent_summary = context.summary or context.task_id
+        parent_description = (context.description or "No description provided.").strip()
+        sub_summary = subtask_summary or "No summary"
+        sub_description = (subtask_description or "No description provided.").strip()
+
+        return dedent(
+            f"""
+            Parent task {context.task_id}: {parent_summary}
+            Parent description:
+            {parent_description}
+
+            Subtask {subtask_key}: {sub_summary}
+            Details:
+            {sub_description}
+            """
+        ).strip()
+
+    def _compose_db_task_prompt(
+        self, context: DbTaskContext, payload: TaskPayload, *, has_subtasks: bool
+    ) -> str:
+        """Prompt to persist on the parent TASK row.
+
+        - When subtasks exist, this is a parent-context prompt (not a subtask execution prompt).
+        - When subtasks do not exist, this becomes the execution prompt for the whole task.
+        """
+        description = (context.description or "No description provided.").strip()
+        if has_subtasks:
+            base = (
+                "This is the parent task context. Use it for overall alignment and "
+                "to understand requirements. Do not implement individual subtasks "
+                "from this prompt; each subtask has its own implementation prompt."
+            )
+        else:
+            base = self._build_fallback_prompt(payload)
+        return dedent(
+            f"""
+            {base}
+
+            Task {context.task_id}: {context.summary or context.task_id}
+            Details:
+            {description}
+            """
+        ).strip()
 
 
 __all__ = ["TaskOrchestrator"]
