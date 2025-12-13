@@ -79,8 +79,8 @@ class DbTaskContext(BaseModel):
     subtasks: list[DbSubtaskContext] = Field(default_factory=list)
 
 
-class OrchestratedPromptItem(BaseModel):
-    """A prompt generated for insertion into the tasks table."""
+class TaskPromptItem(BaseModel):
+    """A prompt to persist for a TASK or SUBTASK row."""
 
     task_id: str = Field(..., min_length=1, description="Parent task identifier")
     task_type: Literal["TASK", "SUBTASK"] = Field(
@@ -90,25 +90,26 @@ class OrchestratedPromptItem(BaseModel):
         default=None, description="Subtask identifier (required for SUBTASK prompts)"
     )
     prompt: str = Field(..., min_length=1, description="Prompt to persist into DB")
-    agent_summary: str | None = Field(
-        default=None, description="Optional short summary for UI/debug"
-    )
+
+    @field_validator("sub_task_id", mode="before")
+    @classmethod
+    def _empty_subtask_id_to_none(cls, value: object) -> object:
+        # Some models emit "" instead of null; treat it as null.
+        return None if value == "" else value
 
     @model_validator(mode="after")
-    def _validate_type_fields(self) -> "OrchestratedPromptItem":
-        if self.task_type == "TASK":
-            if self.sub_task_id not in (None, ""):
-                raise ValueError("TASK prompt must have sub_task_id = null")
-        else:
-            if not self.sub_task_id:
-                raise ValueError("SUBTASK prompt must include sub_task_id")
+    def _validate_type_fields(self) -> "TaskPromptItem":
+        if self.task_type == "TASK" and self.sub_task_id is not None:
+            raise ValueError("TASK prompt must have sub_task_id = null")
+        if self.task_type == "SUBTASK" and self.sub_task_id is None:
+            raise ValueError("SUBTASK prompt must include sub_task_id")
         return self
 
 
-class OrchestratedPromptOutput(BaseModel):
+class TaskPromptOutput(BaseModel):
     """Structured OpenRouter output: N prompts (task + subtasks)."""
 
-    prompts: list[OrchestratedPromptItem] = Field(
+    prompts: list[TaskPromptItem] = Field(
         ..., description="One prompt per task/subtask row to persist"
     )
 
@@ -120,6 +121,6 @@ __all__ = [
     "OrchestrationResult",
     "DbTaskContext",
     "DbSubtaskContext",
-    "OrchestratedPromptItem",
-    "OrchestratedPromptOutput",
+    "TaskPromptItem",
+    "TaskPromptOutput",
 ]

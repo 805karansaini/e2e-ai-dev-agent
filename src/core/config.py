@@ -80,7 +80,6 @@ class Settings(BaseSettings):
         description="Default OpenRouter model identifier.",
     )
 
-
     OPENROUTER_TIMEOUT_SECONDS: float = Field(
         600.0, description="Timeout (seconds) for OpenRouter requests."
     )
