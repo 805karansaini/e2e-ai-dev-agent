@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -16,6 +17,8 @@ from .parsers import (
     parse_jira_subtask_issue,
     parse_jira_task,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class JiraConfig(BaseModel):
@@ -199,7 +202,12 @@ class JiraClient:
         for issue_key, result in zip(issue_keys, results):
             if isinstance(result, Exception):
                 # Log and continue; upstream caller can decide what to do.
-                print(f"Error fetching issue {issue_key}: {result}")
+                logger.warning(
+                    "Error fetching issue %s: %s",
+                    issue_key,
+                    result,
+                    exc_info=result,
+                )
             elif result is not None:
                 valid_tasks.append(result)
         return valid_tasks
@@ -298,7 +306,7 @@ class JiraClient:
         async def download_one(url: str, dest: Path) -> Optional[Path]:
             async with self.session.get(url) as resp:
                 if resp.status != 200:
-                    print(f"Failed to download {url}: HTTP {resp.status}")
+                    logger.warning("Failed to download %s: HTTP %s", url, resp.status)
                     return None
                 data = await resp.read()
                 dest.parent.mkdir(parents=True, exist_ok=True)
