@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -243,6 +244,47 @@ async def import_task_from_jira(
 ) -> Success[TaskResponse]:
     """Import a task from Jira and insert it into the database."""
     try:
+        # Determine whether this task existed prior to import so we can return
+        # 201 (created) vs 200 (updated) while keeping the endpoint idempotent.
+        existed_before = True
+        try:
+            service.get_task(request.jira_task_id)
+        except TaskNotFoundError:
+            existed_before = False
+
+        def _split_attachment_paths(
+            paths: list[Path] | None,
+            *,
+            parent_key: str,
+            subtask_keys: set[str],
+        ) -> tuple[list[dict[str, str]], dict[str, list[dict[str, str]]]]:
+            """Split downloaded attachment paths into task vs subtask buckets."""
+
+            task_attachments: list[dict[str, str]] = []
+            subtask_attachments: dict[str, list[dict[str, str]]] = {}
+
+            for p in paths or []:
+                path = Path(p)
+                record = {"filename": path.name, "path": str(path)}
+
+                # The download path convention is:
+                #   <attachments_dir>/<PARENT_KEY>/<filename>
+                # or
+                #   <attachments_dir>/<PARENT_KEY>/<SUBTASK_KEY>/<filename>
+                parts = path.parts
+                try:
+                    idx = parts.index(parent_key)
+                except ValueError:
+                    task_attachments.append(record)
+                    continue
+
+                if idx + 1 < len(parts) and parts[idx + 1] in subtask_keys:
+                    subtask_key = parts[idx + 1]
+                    subtask_attachments.setdefault(subtask_key, []).append(record)
+                else:
+                    task_attachments.append(record)
+
+            return task_attachments, subtask_attachments
 
         def _jira_metadata(issue: Any) -> dict[str, Any]:
             """Best-effort Jira metadata (json-serializable)."""
@@ -280,44 +322,75 @@ async def import_task_from_jira(
         context = await build_and_persist_context(payload)
 
         jira_task = context.task
-        task_summary = jira_task.summary or jira_task.key
-        task_description = jira_task.description or ""
-        create_task_data = CreateTask(
-            task_id=jira_task.key,
-            summary=task_summary,
-            description=task_description,
-            repo_url=request.repo_url,
-            base_branch=request.branch,
-            status=TaskStatus.PENDING.value,
-            additional_json=_jira_metadata(jira_task),
+        subtask_keys = {st.key for st in jira_task.subtasks if st.key}
+        task_attachments, subtask_attachments = _split_attachment_paths(
+            context.attachments, parent_key=jira_task.key, subtask_keys=subtask_keys
         )
 
+        # The call above already persisted parent + subtasks via TaskPersistence.
+        # Here we update metadata/attachments (idempotent) and return the parent.
         try:
-            task = service.create_task(create_task_data)
+            task = service.get_task(jira_task.key)
+        except TaskServiceError as exc:
+            _raise_http_error(exc)
+
+        try:
+            task = service.update_task(
+                jira_task.key,
+                TaskUpdate(
+                    summary=jira_task.summary or jira_task.key,
+                    repo_url=request.repo_url,
+                    base_branch=request.branch,
+                    attachment_path=task_attachments or None,
+                    additional_json=_jira_metadata(jira_task),
+                ),
+            )
         except TaskServiceError as exc:
             _raise_http_error(exc)
 
         for subtask in jira_task.subtasks:
+            if not subtask.key:
+                continue
             subtask_summary = subtask.summary or subtask.key
             subtask_description = subtask.description or ""
-            create_subtask_data = CreateSubTask(
-                task_id=jira_task.key,
-                sub_task_id=subtask.key,
-                summary=subtask_summary,
-                description=subtask_description,
-                repo_url=request.repo_url,
-                base_branch=request.branch,
-                status=TaskStatus.PENDING.value,
-                additional_json=_jira_metadata(subtask),
-            )
             try:
-                service.create_sub_task(create_subtask_data)
+                service.update_sub_task(
+                    subtask.key,
+                    SubTaskUpdate(
+                        repo_url=request.repo_url,
+                        base_branch=request.branch,
+                        attachment_path=subtask_attachments.get(subtask.key) or None,
+                        additional_json=_jira_metadata(subtask),
+                    ),
+                )
+            except TaskNotFoundError:
+                # If persistence didn't create a row for some reason, create it now.
+                try:
+                    service.create_sub_task(
+                        CreateSubTask(
+                            task_id=jira_task.key,
+                            sub_task_id=subtask.key,
+                            summary=subtask_summary,
+                            description=subtask_description,
+                            repo_url=request.repo_url,
+                            base_branch=request.branch,
+                            attachment_path=subtask_attachments.get(subtask.key)
+                            or None,
+                            status=TaskStatus.PENDING.value,
+                            additional_json=_jira_metadata(subtask),
+                        )
+                    )
+                except TaskServiceError as exc:
+                    logger.warning("Failed to create subtask %s: %s", subtask.key, exc)
             except TaskServiceError as exc:
                 # Keep importing other subtasks; return the main task either way.
                 logger.warning("Failed to create subtask %s: %s", subtask.key, exc)
 
         return success(
-            TaskResponse.model_validate(task), status_code=status.HTTP_201_CREATED
+            TaskResponse.model_validate(task),
+            status_code=(
+                status.HTTP_200_OK if existed_before else status.HTTP_201_CREATED
+            ),
         )
     except HTTPException:
         raise

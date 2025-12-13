@@ -233,6 +233,8 @@ class TaskSearchRequest(BaseModel):
 class ImportJiraTaskRequest(BaseModel):
     """Schema for importing a task from Jira."""
 
-    jira_task_id: str = Field(..., min_length=1, description="Jira task ID (e.g., PROJ-123)")
+    jira_task_id: str = Field(
+        ..., min_length=1, description="Jira task ID (e.g., PROJ-123)"
+    )
     repo_url: str = Field(..., min_length=1, description="Repository URL")
     branch: str = Field(..., min_length=1, description="Branch name")

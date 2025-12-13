@@ -14,7 +14,7 @@ from .runner import TaskRunner, task_runner
 
 _base_dir = Path(settings.TASK_WORKDIR or os.getcwd())
 _attachments_dir = _base_dir / "data" / "jira_attachments"
-_persistence = TaskPersistence(_base_dir / "data" / "tasks.db", _attachments_dir)
+_persistence = TaskPersistence(_attachments_dir)
 _context_builder = JiraContextBuilder(_attachments_dir)
 _prompt_builder = PromptBuilder(_base_dir, _attachments_dir)
 _cli_executor = ClineExecutor(

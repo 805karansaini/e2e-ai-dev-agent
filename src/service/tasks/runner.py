@@ -24,7 +24,6 @@ class TaskRunner:
         cli_bin: str,
         extra_args: Optional[list[str]] = None,
         workdir: Optional[str] = None,
-        db_path: Optional[str] = None,
         *,
         context_builder: JiraContextBuilder | None = None,
         prompt_builder: PromptBuilder | None = None,
@@ -37,7 +36,6 @@ class TaskRunner:
 
         self.base_dir = Path(workdir or os.getcwd())
         self.attachments_dir = self.base_dir / "data" / "jira_attachments"
-        self.db_path = Path(db_path) if db_path else self.base_dir / "data" / "tasks.db"
 
         self._context_builder = context_builder or JiraContextBuilder(
             self.attachments_dir
@@ -46,9 +44,7 @@ class TaskRunner:
             self.base_dir, self.attachments_dir
         )
         self._executor = executor or ClineExecutor(cli_bin, self.extra_args, workdir)
-        self._persistence = persistence or TaskPersistence(
-            self.db_path, self.attachments_dir
-        )
+        self._persistence = persistence or TaskPersistence(self.attachments_dir)
 
         self._queue: asyncio.Queue[TaskPayload] | None = None
         self._worker: asyncio.Task[None] | None = None

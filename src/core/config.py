@@ -14,10 +14,15 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    DATABASE_URL: str = Field(
+        "sqlite:///./data/tasks.db",
+        description="SQLAlchemy database URL. Only sqlite file URLs are supported.",
+    )
+
     APP_HOST: str = Field(
         "0.0.0.0", description="Host interface for the FastAPI server"
     )
-    APP_PORT: int = Field(8000, description="Port for the FastAPI server")
+    APP_PORT: int = Field(8080, description="Port for the FastAPI server")
     LOG_LEVEL: str = Field(
         "INFO",
         description="Logging level for the application (e.g. DEBUG, INFO).",
