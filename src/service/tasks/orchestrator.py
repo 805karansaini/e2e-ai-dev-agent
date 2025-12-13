@@ -86,24 +86,29 @@ class TaskOrchestrator:
             payload=payload,
         )
 
-        subtask_plans = self._build_subtask_plans_from_db_context(
-            context=context,
-            payload=payload,
-            parent_prompt=parent_prompt,
-            subtask_prompt_map=subtask_prompt_map,
-        )
+        # TODO: Remove later
+        # subtask_plans = self._build_subtask_plans_from_db_context(
+        #     context=context,
+        #     payload=payload,
+        #     parent_prompt=parent_prompt,
+        #     subtask_prompt_map=subtask_prompt_map,
+        # )
 
-        logger.debug(f"Subtask plans: {subtask_plans}")
+        # logger.debug(f"Subtask plans: {subtask_plans}")
 
-        simple_prompt = self._build_simple_prompt(payload, subtask_plans)
-        logger.debug(f"Simple prompt: {simple_prompt}")
+        # simple_prompt = self._build_simple_prompt(payload, subtask_plans)
+        # logger.debug(f"Simple prompt: {simple_prompt}")
 
-        orchestration_prompt = parent_prompt
+        # orchestration_prompt = parent_prompt
 
-        if use_cline:
-            # Kick off the orchestration prompt through the CLINE CLI. This runs the
-            # high-level planning prompt; per-item prompts are persisted above.
-            await self._executor.execute(orchestration_prompt, payload)
+        # if use_cline:
+        #     # Kick off the orchestration prompt through the CLINE CLI. This runs the
+        #     # high-level planning prompt; per-item prompts are persisted above.
+        #     await self._executor.execute(orchestration_prompt, payload)
+
+        orchestration_prompt = ""
+        simple_prompt = ""
+        subtask_plans = []
 
         return OrchestrationResult(
             task_id=payload.task_id,

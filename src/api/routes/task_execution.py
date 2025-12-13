@@ -99,8 +99,6 @@ async def orchestrate_task(body: TaskCreateRequest) -> Success[TaskPlanResponse]
 async def start_task(body: TaskCreateRequest) -> Success[TaskStartResponse]:
     """Start execution using stored prompts for the task and its subtasks."""
 
-    _ensure_cli_available()
-
     started = await _start_or_error(body.task_id)
 
     response = TaskStartResponse(task_id=body.task_id, started_subtasks=started)
@@ -115,8 +113,6 @@ async def start_task(body: TaskCreateRequest) -> Success[TaskStartResponse]:
 )
 async def auto_dev_task(body: TaskCreateRequest) -> Success[TaskAutoResponse]:
     """Orchestrate and start execution in a single request."""
-
-    _ensure_cli_available()
 
     payload = _build_payload(body)
 
