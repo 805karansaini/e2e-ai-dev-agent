@@ -1,6 +1,6 @@
 "use client"
 
-import { Fragment, useEffect, useMemo, useState, useCallback } from "react"
+import { Fragment, useEffect, useState, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
@@ -54,7 +54,7 @@ interface Task {
   jira_task_id?: string | null
   subtasks?: Task[]
   attachment_path?: AttachmentPath[] | null
-  additional_json?: any
+  additional_json?: Record<string, unknown> | null
   created_at?: string
   updated_at?: string
 }
@@ -78,8 +78,8 @@ function normalizeTasks(records: TaskRecord[]): Task[] {
         summary: rec.summary ?? null,
         agent_summary: rec.agent_summary ?? null,
         jira_task_id: rec.task_id,
-        attachment_path: rec.attachment_path as any,
-        additional_json: rec.additional_json,
+        attachment_path: rec.attachment_path ?? null,
+        additional_json: rec.additional_json ?? null,
         subtasks: [],
         created_at: rec.created_at,
         updated_at: rec.updated_at,
@@ -103,8 +103,8 @@ function normalizeTasks(records: TaskRecord[]): Task[] {
         summary: rec.summary ?? null,
         agent_summary: rec.agent_summary ?? null,
         jira_task_id: rec.task_id,
-        attachment_path: rec.attachment_path as any,
-        additional_json: rec.additional_json,
+        attachment_path: rec.attachment_path ?? null,
+        additional_json: rec.additional_json ?? null,
         subtasks: [],
       })
       continue
@@ -126,8 +126,8 @@ function normalizeTasks(records: TaskRecord[]): Task[] {
       summary: rec.summary ?? null,
       agent_summary: rec.agent_summary ?? null,
       jira_task_id: rec.sub_task_id,
-      attachment_path: rec.attachment_path as any,
-      additional_json: rec.additional_json,
+      attachment_path: rec.attachment_path ?? null,
+      additional_json: rec.additional_json ?? null,
       subtasks: [],
       created_at: rec.created_at,
       updated_at: rec.updated_at,
@@ -148,14 +148,12 @@ export default function TaskManagementPage() {
   const [parentTaskId, setParentTaskId] = useState<string | null>(null)
   const [viewingTask, setViewingTask] = useState<Task | null>(null)
   const [isViewModalOpen, setIsViewModalOpen] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [actionLoadingKey, setActionLoadingKey] = useState<string | null>(null)
   const EXPANDED_STORAGE_KEY = "task-expanded-ids"
   const POLL_MS = 5000
 
   const loadTasks = useCallback(async () => {
-    setIsLoading(true)
     setError(null)
     try {
       const records = await listTasks()
@@ -163,8 +161,6 @@ export default function TaskManagementPage() {
     } catch (err) {
       console.error("Failed to load tasks", err)
       setError(err instanceof Error ? err.message : "Unable to load tasks")
-    } finally {
-      setIsLoading(false)
     }
   }, [])
 
@@ -229,7 +225,8 @@ export default function TaskManagementPage() {
       summary: null,
       agent_summary: null,
     })
-    setParentTaskId(parentTask.id)
+    // Parent ids can come back as numbers from the API; store as string for state consistency
+    setParentTaskId(String(parentTask.id))
     setModalMode("subtask")
     setIsModalOpen(true)
   }
@@ -281,7 +278,7 @@ export default function TaskManagementPage() {
           summary: editingTask.summary || undefined,
           repo_url: editingTask.repo_url || undefined,
           base_branch: editingTask.base_branch || undefined,
-          status: editingTask.status as any,
+          status: editingTask.status,
           prompt: editingTask.prompt,
           agent_summary: editingTask.agent_summary || undefined,
         })
@@ -293,7 +290,7 @@ export default function TaskManagementPage() {
           summary: editingTask.summary || undefined,
           repo_url: editingTask.repo_url || undefined,
           base_branch: editingTask.base_branch || undefined,
-          status: editingTask.status as any,
+          status: editingTask.status,
           prompt: editingTask.prompt,
           agent_summary: editingTask.agent_summary || undefined,
         })
@@ -305,7 +302,7 @@ export default function TaskManagementPage() {
             summary: editingTask.summary || undefined,
             repo_url: editingTask.repo_url || undefined,
             base_branch: editingTask.base_branch || undefined,
-            status: editingTask.status as any,
+            status: editingTask.status,
             prompt: editingTask.prompt,
             agent_summary: editingTask.agent_summary || undefined,
           })
@@ -315,7 +312,7 @@ export default function TaskManagementPage() {
             summary: editingTask.summary || undefined,
             repo_url: editingTask.repo_url || undefined,
             base_branch: editingTask.base_branch || undefined,
-            status: editingTask.status as any,
+            status: editingTask.status,
             prompt: editingTask.prompt,
             agent_summary: editingTask.agent_summary || undefined,
           })
@@ -364,7 +361,7 @@ export default function TaskManagementPage() {
     }
   }
 
-  const toggleExpand = (taskId: string) => {
+  const toggleExpand = (taskId: string | number) => {
     setExpandedTasks((prev) => {
       const next = new Set(prev)
       if (next.has(taskId)) {
