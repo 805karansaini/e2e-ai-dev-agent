@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Optional
 
 from loguru import logger
 
 from src.core.config import settings
+from src.service.database_handler.config import get_db_session
+from src.service.database_handler.crud import TaskCRUD
+from src.service.database_handler.models.task import TaskStatus
 from src.service.llm import OpenRouterLLM
 
 from .cli_executor import ClineExecutor
@@ -55,36 +59,52 @@ class TaskOrchestrator:
             )
         logger.debug(f"Context: {context}")
 
-        # System prompt for the orchestrator model.
-        orchestration_preamble = self._prompt_builder.orchestration_preamble()
+        try:
+            # Mark planning in progress for parent + subtasks.
+            await self._set_status_for_task_and_subtasks(
+                task_key=payload.task_id, status=TaskStatus.PLANNING
+            )
 
-        # Context for the orchestrator model.
-        orchestration_context = self._prompt_builder.compose(
-            context, payload, include_orchestration_preamble=False
-        )
-        logger.debug(f"Orchestration context: {orchestration_context}")
+            # System prompt for the orchestrator model.
+            orchestration_preamble = self._prompt_builder.orchestration_preamble()
 
-        structured = await self._generate_high_level_plan_via_openrouter(
-            system_preamble=orchestration_preamble,
-            prompt=orchestration_context,
-            context=context,
-            payload=payload,
-        )
+            # Context for the orchestrator model.
+            orchestration_context = self._prompt_builder.compose(
+                context, payload, include_orchestration_preamble=False
+            )
+            logger.debug(f"Orchestration context: {orchestration_context}")
 
-        logger.debug(f"Structured: {structured}")
+            structured = await self._generate_high_level_plan_via_openrouter(
+                system_preamble=orchestration_preamble,
+                prompt=orchestration_context,
+                context=context,
+                payload=payload,
+            )
 
-        parent_prompt, subtask_prompt_map = self._validate_and_extract_prompts(
-            structured=structured, context=context, payload=payload
-        )
-        logger.debug(f"Parent prompt: {parent_prompt}")
-        logger.debug(f"Subtask prompt map: {subtask_prompt_map}")
+            logger.debug(f"Structured: {structured}")
 
-        await self._persistence.persist_orchestration_prompts(
-            task_key=payload.task_id,
-            parent_prompt=parent_prompt,
-            subtask_prompts=subtask_prompt_map,
-            payload=payload,
-        )
+            parent_prompt, subtask_prompt_map = self._validate_and_extract_prompts(
+                structured=structured, context=context, payload=payload
+            )
+            logger.debug(f"Parent prompt: {parent_prompt}")
+            logger.debug(f"Subtask prompt map: {subtask_prompt_map}")
+
+            await self._persistence.persist_orchestration_prompts(
+                task_key=payload.task_id,
+                parent_prompt=parent_prompt,
+                subtask_prompts=subtask_prompt_map,
+                payload=payload,
+            )
+
+            # Prompts are now persisted and ready for development.
+            await self._set_status_for_task_and_subtasks(
+                task_key=payload.task_id, status=TaskStatus.READY
+            )
+        except Exception:  # noqa: BLE001
+            await self._set_status_for_task_and_subtasks(
+                task_key=payload.task_id, status=TaskStatus.FAILURE
+            )
+            raise
 
         # TODO: Remove later
         # subtask_plans = self._build_subtask_plans_from_db_context(
@@ -118,6 +138,32 @@ class TaskOrchestrator:
             simple_prompt=simple_prompt,
             subtask_prompts=subtask_plans,
         )
+
+    async def _set_status_for_task_and_subtasks(
+        self, *, task_key: str, status: TaskStatus
+    ) -> None:
+        """Best-effort status update for the parent TASK row + all SUBTASK rows."""
+
+        def _set_sync() -> None:
+            db = get_db_session()
+            try:
+                parent = TaskCRUD.get_task_by_task_id(db, task_key)
+                if parent is not None:
+                    TaskCRUD.update_task(db, parent.id, status=status.value)
+                for st in TaskCRUD.get_subtasks_by_task_id(db, task_key) or []:
+                    TaskCRUD.update_task(db, st.id, status=status.value)
+            finally:
+                db.close()
+
+        try:
+            await asyncio.to_thread(_set_sync)
+        except Exception:  # noqa: BLE001
+            # Status tracking should never prevent orchestration itself.
+            logger.exception(
+                "Failed to set status={status} for task '{task_key}' (best-effort).",
+                status=status.value,
+                task_key=task_key,
+            )
 
     @staticmethod
     async def _generate_high_level_plan_via_openrouter(
