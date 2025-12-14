@@ -80,10 +80,9 @@ class JiraClient:
         await self._ensure_session()
         return self
 
-    async def __aexit__(self, exc_type, exc, tb) -> None:  # pragma: no cover - cleanup
+    async def __aexit__(self, *args) -> None:  # pragma: no cover - cleanup
         if self._owns_session and self._session:
             await self._session.close()
-
     @property
     def session(self) -> aiohttp.ClientSession:
         if not self._session:
