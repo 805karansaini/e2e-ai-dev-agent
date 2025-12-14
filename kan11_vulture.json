@@ -1,0 +1,2 @@
+src/service/jira/client.py:83: unused variable 'exc_type' (100% confidence)
+src/service/jira/client.py:83: unused variable 'tb' (100% confidence)
