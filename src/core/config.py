@@ -55,10 +55,19 @@ class Settings(BaseSettings):
         default_factory=lambda: [
             "http://localhost:5173",
             "http://127.0.0.1:5173",
+            "https://stirred-organic-spaniel.ngrok-free.app",
+            "https://frontend-sage-eight-38.vercel.app",
         ],
         description=(
             "Allowed CORS origins for the FastAPI backend. "
             "Override in .env (comma-separated or JSON list) for other frontends."
+        ),
+    )
+    BACKEND_CORS_ORIGIN_REGEX: Optional[str] = Field(
+        None,
+        description=(
+            "Optional regex for allowed origins (e.g. https://.*\\.ngrok-free\\.app). "
+            "Takes precedence over BACKEND_CORS_ORIGINS when provided."
         ),
     )
 

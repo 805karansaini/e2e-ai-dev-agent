@@ -44,9 +44,11 @@ def create_app() -> FastAPI:
     install_logging_middleware(app)
 
     # CORS for frontend (configurable via settings)
+    # Prefer regex if provided (useful for rotating ngrok URLs); otherwise, static list
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.BACKEND_CORS_ORIGINS,
+        allow_origin_regex=settings.BACKEND_CORS_ORIGIN_REGEX,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
