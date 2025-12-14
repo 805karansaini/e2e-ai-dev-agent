@@ -54,9 +54,10 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: List[str] = Field(
         default_factory=lambda: [
             "http://localhost:5173",
+            "http://localhost:3000",
             "http://127.0.0.1:5173",
             "https://stirred-organic-spaniel.ngrok-free.app",
-            "https://frontend-sage-eight-38.vercel.app",
+            "https://e2e-dev-agent.vercel.app",
         ],
         description=(
             "Allowed CORS origins for the FastAPI backend. "
