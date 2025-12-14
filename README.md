@@ -2,6 +2,15 @@
 
 An end-to-end AI development agent that orchestrates task execution using CLINE CLI, integrates with Jira for task management, and provides a FastAPI backend for task orchestration and execution.
 
+## Frontend
+
+The frontend provides a user interface for interacting with the AI development agent, allowing users to manage tasks, view progress, and monitor executions through an intuitive web interface.
+
+**Repository:** [e2e-ai-dev-agent-frontend](https://github.com/805karansaini/e2e-ai-dev-agent-frontend/)
+
+For detailed frontend documentation and setup instructions, please refer to the [frontend repository](https://github.com/805karansaini/e2e-ai-dev-agent-frontend/).
+
+
 ## Table of Contents
 
 - [Overview](#overview)
@@ -143,7 +152,11 @@ pytest tests/
 
 Or use `/tasks/auto` for a single-call workflow that handles orchestration and execution.
 
----
+## High Level Architecture
+
+This is a high level architecture of the application.
+
+## ![High Level Architecture](high-level-architechture.png)
 
 ## Project Structure
 
