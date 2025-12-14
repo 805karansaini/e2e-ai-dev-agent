@@ -108,7 +108,7 @@ async def import_task_from_jira(
             repo_url=request.repo_url,
             base_branch=request.branch,
             attachment_path=task_attachments or None,
-            additional_json=jira_metadata(jira_task),
+            additional_json=None,
         ),
     )
 
@@ -145,7 +145,7 @@ def _best_effort_update_subtasks(
                     repo_url=request.repo_url,
                     base_branch=request.branch,
                     attachment_path=subtask_attachments.get(subtask.key) or None,
-                    additional_json=jira_metadata(subtask),
+                    additional_json=None,
                 ),
             )
         except TaskNotFoundError:
@@ -163,7 +163,7 @@ def _best_effort_update_subtasks(
                         base_branch=request.branch,
                         attachment_path=subtask_attachments.get(subtask.key) or None,
                         status=TaskStatus.PENDING.value,
-                        additional_json=jira_metadata(subtask),
+                        additional_json=None,
                     )
                 )
             except TaskServiceError as exc:
