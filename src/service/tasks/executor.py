@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -205,6 +206,22 @@ class TaskExecutor:
             return (row.task_id if row else None) or None
         finally:
             db.close()
+
+    def _load_prompt_template(self, filename: str) -> str:
+        """Load a prompt template from the prompts directory."""
+        project_root = Path(__file__).resolve().parents[3]
+        prompt_path = project_root / "prompts" / filename
+
+        if not prompt_path.exists():
+            raise FileNotFoundError(
+                f"Prompt template '{filename}' not found at {prompt_path}"
+            )
+
+        try:
+            return prompt_path.read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            logger.error(f"Failed to read prompt template '{filename}': {exc}")
+            raise
 
     async def _review_code(self, *, task_key: str, payload: TaskPayload) -> None:
         """Background follow-up: ask the agent to review changes.
