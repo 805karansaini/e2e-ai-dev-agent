@@ -20,8 +20,14 @@ from .base import Base
 
 class TaskStatus(enum.Enum):
     PENDING = "PENDING"
-    SUCCESS = "SUCCESS"
-    FAILED = "FAILED"
+    PLANNING = "PLANNING"
+    READY = "READY"
+    QUEUED = "QUEUED"
+    IN_PROGRESS = "IN_PROGRESS"
+    REVIEWING = "REVIEWING"
+    PULL_REQUEST = "PULL_REQUEST"
+    DONE = "DONE"
+    FAILURE = "FAILURE"
 
 
 class TaskType(enum.Enum):

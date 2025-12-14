@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException, status
+from loguru import logger
 
 from src.api.schemas import (
     SubtaskPromptSchema,
@@ -13,7 +16,11 @@ from src.api.schemas import (
     TaskStartResponse,
     success,
 )
-from src.service.tasks import TaskPayload, task_executor, task_orchestrator
+from src.service.tasks import (
+    TaskPayload,
+    task_executor,
+    task_orchestrator,
+)
 
 router = APIRouter(tags=["tasks"])
 
@@ -26,12 +33,9 @@ def _ensure_cli_available() -> None:
         )
 
 
-def _build_payload(body: TaskCreateRequest) -> TaskPayload:
-    return TaskPayload(
-        task_id=body.task_id,
-        repo_url=body.repo_url,
-        base_branch=body.base_branch,
-    )
+def _payload_from_request(body: TaskCreateRequest) -> TaskPayload:
+    """Create a validated task payload from the request body."""
+    return TaskPayload(**body.model_dump())
 
 
 def _map_subtasks(subtasks: list) -> list[SubtaskPromptSchema]:
@@ -46,30 +50,51 @@ def _map_subtasks(subtasks: list) -> list[SubtaskPromptSchema]:
     ]
 
 
-def _raise_unavailable(exc: RuntimeError) -> None:
-    raise HTTPException(
-        status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)
-    ) from exc
+def _http_exception_from_runtime(exc: RuntimeError) -> HTTPException:
+    """Translate domain errors into appropriate HTTP responses."""
+    message = str(exc)
+    lowered = message.lower()
+
+    if "not found" in lowered:
+        status_code = status.HTTP_404_NOT_FOUND
+    elif any(term in lowered for term in ("no stored", "malformed", "invalid")):
+        status_code = status.HTTP_400_BAD_REQUEST
+    elif "not available" in lowered or "unavailable" in lowered:
+        status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    else:
+        status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+
+    return HTTPException(status_code=status_code, detail=message)
+
+
+async def _start_execution(payload: TaskPayload) -> list[str]:
+    _ensure_cli_available()
+    return await task_executor.start_task(
+        task_key=payload.task_id,
+        repo_url=payload.repo_url,
+        base_branch=payload.base_branch,
+    )
 
 
 async def _start_or_error(body: TaskCreateRequest) -> list[str]:
-    _ensure_cli_available()
+    payload = _payload_from_request(body)
     try:
-        return await task_executor.start_task(
-            task_key=body.task_id, repo_url=body.repo_url, base_branch=body.base_branch
-        )
+        return await _start_execution(payload)
     except RuntimeError as exc:
-        message = str(exc)
-        status_code = (
-            status.HTTP_404_NOT_FOUND
-            if "not found" in message.lower()
-            else status.HTTP_400_BAD_REQUEST
-            if "no stored" in message.lower() or "malformed" in message.lower()
-            else status.HTTP_503_SERVICE_UNAVAILABLE
-            if "not available" in message.lower()
-            else status.HTTP_500_INTERNAL_SERVER_ERROR
+        raise _http_exception_from_runtime(exc) from exc
+
+
+async def _auto_dev_background(payload: TaskPayload) -> None:
+    """Run orchestration + execution start asynchronously."""
+    try:
+        await task_orchestrator.orchestrate(payload)
+        await _start_execution(payload)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception(
+            "Auto-dev flow failed for task '{task_id}': {error}",
+            task_id=payload.task_id,
+            error=exc,
         )
-        raise HTTPException(status_code=status_code, detail=message) from exc
 
 
 @router.post(
@@ -81,11 +106,11 @@ async def _start_or_error(body: TaskCreateRequest) -> list[str]:
 async def orchestrate_task(body: TaskCreateRequest) -> Success[TaskPlanResponse]:
     """Generate prompts and a full execution plan for a task."""
 
-    payload = _build_payload(body)
+    payload = _payload_from_request(body)
     try:
         result = await task_orchestrator.orchestrate(payload)
     except RuntimeError as exc:
-        _raise_unavailable(exc)
+        raise _http_exception_from_runtime(exc) from exc
 
     response = TaskPlanResponse(
         task_id=payload.task_id,
@@ -93,7 +118,7 @@ async def orchestrate_task(body: TaskCreateRequest) -> Success[TaskPlanResponse]
         base_branch=payload.base_branch,
         orchestration_prompt=result.orchestration_prompt,
         simple_prompt=result.simple_prompt,
-        subtask_prompts=_map_subtasks(result.subtask_prompts),
+        subtask_prompts=_map_subtasks(result.subtask_prompts or []),
     )
     return success(response, status_code=status.HTTP_202_ACCEPTED)
 
@@ -120,20 +145,19 @@ async def start_task(body: TaskCreateRequest) -> Success[TaskStartResponse]:
     summary="Complete Auto Dev",
 )
 async def auto_dev_task(body: TaskCreateRequest) -> Success[TaskAutoResponse]:
-    """Orchestrate and start execution in a single request."""
+    """Orchestrate and start execution in a single request (background)."""
 
-    payload = _build_payload(body)
+    _ensure_cli_available()
+    payload = _payload_from_request(body)
 
-    try:
-        orchestration_result = await task_orchestrator.orchestrate(payload)
-    except RuntimeError as exc:
-        _raise_unavailable(exc)
-
-    started = await _start_or_error(body)
+    # Queue the long-running orchestration + execution start chain.
+    asyncio.create_task(
+        _auto_dev_background(payload), name=f"auto-dev-{payload.task_id}"
+    )
 
     response = TaskAutoResponse(
         task_id=payload.task_id,
-        orchestration_prompt=orchestration_result.orchestration_prompt,
-        started_subtasks=started,
+        orchestration_prompt="",
+        started_subtasks=[],
     )
     return success(response, status_code=status.HTTP_202_ACCEPTED)
