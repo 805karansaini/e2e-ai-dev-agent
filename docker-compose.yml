@@ -1,0 +1,47 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: e2e-ai-backend
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    # Note: .env file must exist with required variables like OPENROUTER_API_KEY
+    environment:
+      # Override CORS origins for Docker environment
+      - BACKEND_CORS_ORIGINS=http://localhost:80,http://127.0.0.1:80
+      # Ensure database path is correct in container
+      - DATABASE_URL=sqlite:///./data/tasks.db
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health/liveness')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_BACKEND_URL=http://localhost:8080
+    container_name: e2e-ai-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  default:
+    name: e2e-ai-network
