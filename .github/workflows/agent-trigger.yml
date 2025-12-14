@@ -1,0 +1,29 @@
+name: Trigger AI Agent
+
+on:
+  pull_request:
+    types: [opened]
+  issue_comment:
+    types: [created]
+
+jobs:
+  notify-backend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send event to backend
+        if: >
+          github.event_name == 'pull_request' ||
+          contains(github.event.comment.body, '@my-agent')
+        run: |
+          curl -X POST https://webhook.site/641dc95d-c157-4041-ba96-b045f1f4f118 \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ABC" \
+            -d '{
+              "event": "'"${{ github.event_name }}"'",
+              "action": "'"${{ github.event.action }}"'",
+              "repository": "'"${{ github.repository }}"'",
+              "pr_number": "'"${{ github.event.pull_request.number }}"'",
+              "issue_number": "'"${{ github.event.issue.number }}"'",
+              "comment_body": "'"${{ github.event.comment.body }}"'"
+            }'
